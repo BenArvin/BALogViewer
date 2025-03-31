@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .menu{
+            position: absolute;
+            top:0px;
+            left: 0px;
+            background: #fff;
+            border: 1px solid #dadce0;
+            visibility: hidden;
+        }
+        .active{
+            visibility: visible;
+        }
+        #lineNumbers div, #fileContent div, #markContents div {
+            font-size: 16px;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        #fileContent span {
+            line-height: inherit;
+        }
+    </style>
+</head>
+<body>
+    <div id="fullscreenOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999;">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%; color: white; font-size: 24px; font-weight: bold;">
+            Loading...
+        </div>
+    </div>
+    <br>
+    <div id="menu" class="menu" style="background-color: #dadce0; border-radius: 8px; border: 1pt solid black; padding: 5pt 5pt;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.addHighlightKeyWord()">Add Highlight</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeHighlightKeyWord()">Remove Highlight</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeAllHighlightKeyWord()">Remove All Highlight</div>
+        <hr style="border: 0.5pt solid black; margin-left: 3pt; margin-right: 3pt; margin-top: 6pt; margin-bottom: 6pt;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.addMark()">Add Line Mark</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.editMark()">Edit Line Mark</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeMark()">Remove Line Mark</div>
+        <hr style="border: 0.5pt solid black; margin-left: 3pt; margin-right: 3pt; margin-top: 6pt; margin-bottom: 6pt;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.hiddenBefore()">Hidden Before Lines</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.hiddenAfter()">Hidden After Lines</div>
+    </div>
+    <div id="bar" style="position: fixed; top: 0; left: 0; width: 100%; background-color: white; z-index: 1000; padding: 10px; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); display: flex; gap: 10px; align-items: center;">
+        <button id="openButton">Select File</button>
+        <div id="fileNameDiv"></div>
+        <input type="file" id="fileInput" style="display: none;">
+        <div style="width: 20pt;"></div>
+        <div id="visibleRange" style="display: flex; align-items: center; gap: 5px;">
+            <span>Visible Line Range:</span>
+            <div style="display: flex; align-items: center; gap: 5px; border: 1px solid black; padding: 5px; border-radius: 5px;">
+                <span>from</span>
+                <div id="visibleStart" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="window.setVisibleStart()">-</div>
+                <span>to</span>
+                <div id="visibleEnd" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="window.setVisibleEnd()">-</div>
+            </div>
+        </div>
+        <div style="width: 20pt;"></div>
+        <div id="filters" style="display: flex; align-items: center;">
+            Filters:
+            <div id="filterDropdown" style="position: relative; display: inline-block; margin-left: 10px;">
+            <div id="filterText" style="cursor: pointer; width: 500px; border: 1pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="window.showInputBox()"></div>
+            <div id="inputBox" style="display: none; position: absolute; top: 40px; left: 0; width: 500px; height: 100px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
+                <textarea id="filterInput" placeholder="Enter filter keywords here, each keyword perline, regex supported" style="width: 100%; height: 100%;"></textarea>
+                <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
+                    <button onclick="window.cancelFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+                <button onclick="window.applyFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                </div>
+            </div>
+            </div>
+        </div>
+        <button id="newButton" onclick="window.export()" style="margin-left: auto;">Export</button>
+        <div style="width: 10pt;"></div>
+    </div>
+    </br>
+    <div id="realContent">
+        <div style="display: flex;">
+            <div id="lineNumbers" style="width: 30px; border-right: 1px solid #ccc; text-align: center; padding-right: 10px; color: gray; position: sticky; left: 0; overflow: hidden;"></div>
+            <div id="fileContent" style="flex: 1; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"></div>
+            <div id="markContents" style="width: 200px; background-color: #f4f4f4; border-left: 1px solid #ccc; overflow-y: auto; white-space: nowrap; overflow-x: auto; color: gray;"></div>
+        </div>
+    </div>
+
+    <script>
+        class ACTreeNode {
+            constructor() {
+                this.children = {};
+                this.failure = null;
+                this.patterns = [];
+            }
+        }
+        class ACAutomaton {
+            constructor() {
+                this.root = new ACTreeNode();
+            }
+            insert(pattern) {
+                let node = this.root;
+                for (let char of pattern.toLowerCase()) {
+                    if (!node.children[char]) {
+                        node.children[char] = new ACTreeNode();
+                    }
+                    node = node.children[char];
+                }
+                node.patterns.push(pattern);
+            }
+            train() {
+                let queue = [];
+                this.root.failure = this.root;
+                for (let char in this.root.children) {
+                    let child = this.root.children[char];
+                    child.failure = this.root;
+                    queue.push(child);
+                }
+                while (queue.length > 0) {
+                    let current = queue.shift();
+                    for (let char in current.children) {
+                        let child = current.children[char];
+                        let failure = current.failure;
+                        while (failure !== this.root && !failure.children[char]) {
+                            failure = failure.failure;
+                        }
+                        if (failure.children[char]) {
+                            child.failure = failure.children[char];
+                        } else {
+                            child.failure = this.root;
+                        }
+                        queue.push(child);
+                    }
+                }
+            }
+            search(text) {
+                let node = this.root;
+                let results = [];
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i].toLowerCase();
+                    while (node !== this.root && !node.children[char]) {
+                        node = node.failure;
+                    }
+                    if (node.children[char]) {
+                        node = node.children[char];
+                    } else {
+                        node = this.root;
+                    }
+
+                    let temp = node;
+                    while (temp !== this.root) {
+                        if (temp.patterns.length > 0) {
+                            for (let pattern of temp.patterns) {
+                                results.push({ pattern, index: i - pattern.length + 1 });
+                            }
+                        }
+                        temp = temp.failure;
+                    }
+                }
+                return results;
+            }
+        }
+        document.addEventListener('contextmenu', (event) => {
+            const selection = window.getSelection();
+            const selectedDiv = selection.anchorNode.parentNode;
+            window.curSelectionLine = selectedDiv.getAttribute('line_num');
+            if (!window.curSelectionLine) {
+                let parentDiv = selectedDiv.parentNode;
+                while (parentDiv && !parentDiv.getAttribute('line_num')) {
+                    parentDiv = parentDiv.parentNode;
+                }
+                if (parentDiv) {
+                    window.curSelectionLine = parentDiv.getAttribute('line_num');
+                }
+            }
+            window.curSelectionText = selection.toString();
+            if (selection.rangeCount <= 0) {
+                return
+            }
+            if (!window.curSelectionText) {
+                return;
+            }
+            event.preventDefault();
+            const menu=document.getElementById('menu');
+            menu.style.top = event.pageY + 'px';
+            menu.style.left = event.pageX + 'px';
+            menu.classList.add('active');
+        });
+        window.addEventListener('click', function() {
+            menu.classList.remove('active');
+        })
+        const openButton = document.getElementById('openButton');
+        const fileInput = document.getElementById('fileInput');
+        const fileContent = document.getElementById('fileContent');
+        window.colorList = [
+            'red', 'green', 'orange', 'cyan', 'magenta', 'lime', '#b3d9ff', '#b3b3ff', '#ffb3ff'
+        ]
+        window.originContent = "";
+        window.highlightKeywords = {};
+        window.curSelectionText = null;
+        window.filterRules = [];
+        window.filterRuleTexts = [];
+        window.lineNumbers = document.getElementById('lineNumbers');
+        window.markLines = {};
+        window.visibleLinesStart = -1;
+        window.visibleLinesEnd = -1;
+        window.curFileName = "";
+        window.highlightMatcher = null;
+
+        window.showLoading = function () {
+            const overlay = document.getElementById('fullscreenOverlay');
+            overlay.style.display = 'block';
+        }
+
+        window.hideLoading = function () {
+            const overlay = document.getElementById('fullscreenOverlay');
+            overlay.style.display = 'none';
+        }
+
+        // 点击按钮时触发文件选择
+        openButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 处理文件选择
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                window.curFileName = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    window.onFileChanged(e.target.result);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        document.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+            if (file) {
+                window.curFileName = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    window.onFileChanged(e.target.result);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        window.onFileChanged = function(content) {
+            document.getElementById('visibleStart').innerText = '-';
+            document.getElementById('visibleEnd').innerText = '-';
+            document.getElementById('filterText').innerText = '';
+            window.originContent = content;
+            window.highlightKeywords = {};
+            window.filterRules = [];
+            window.markLines = {};
+            window.visibleLinesStart = -1;
+            window.visibleLinesEnd = -1;
+            window.highlightMatcher = null;
+            window.filterRuleTexts = [];
+            window.decorate(true);
+        };
+
+        window.filterDecorate = function (lineText, lineNum) {
+            if (window.filterRules.length <= 0) {
+                return true;
+            }
+            var res = true;
+            for (var i = 0; i < window.filterRules.length; i++) {
+                var rule = window.filterRules[i];
+                if (!rule.test(lineText)) {
+                    res = false;
+                    break;
+                }
+            }
+            return res;
+        };
+        window.highlightDecorate = function (lineText, lineNum) {
+            if (!window.highlightMatcher) {
+                return lineText;
+            }
+            var res = lineText;
+            const matches = window.highlightMatcher.search(lineText);
+            if (matches.length <= 0) {
+                return res;
+            }
+            let offset = 0;
+            for (const match of matches) {
+                const keyword = match.pattern;
+                const color = window.highlightKeywords[keyword];
+                if (!color) {
+                    continue;
+                }
+                const colorHead = `<span style="background-color: ${color};">`;
+                const colorTail = '</span>';
+                res = res.substring(0, match.index + offset) + colorHead + res.substring(match.index + offset, match.index + offset + match.pattern.length) + colorTail + res.substring(match.index + offset + match.pattern.length);
+                offset += colorHead.length + colorTail.length;
+            }
+            return res;
+        };
+
+        window.decorate = function (needResize = false) {
+            window.showLoading();
+
+            setTimeout(() => {
+                document.getElementById('fileNameDiv').innerText = window.curFileName;
+
+                const visibleStartInput = document.getElementById('visibleStart');
+                const visibleEndInput = document.getElementById('visibleEnd');
+                visibleStartInput.innerText = window.visibleLinesStart > 0 ? (Number(window.visibleLinesStart) + 1) : 'start';
+                visibleEndInput.innerText = window.visibleLinesEnd > 0 ? (Number(window.visibleLinesEnd) + 1) : 'end';
+
+                var content = window.originContent;
+                var lines = content.split('\n');
+                var res = "";
+                for (var i = 0; i < lines.length; i++) {
+                    if (window.visibleLinesStart > 0 && i < window.visibleLinesStart) {
+                        continue;
+                    }
+                    if (window.visibleLinesEnd > 0 && i > window.visibleLinesEnd) {
+                        continue;
+                    }
+                    var line = lines[i];
+                    if (!window.filterDecorate(line, i)) {
+                        continue;
+                    }
+                    line = window.htmlEncode(line);
+                    line = window.highlightDecorate(line, i);
+                    var isMarked = false;
+                    if (window.markLines.hasOwnProperty(i)) {
+                        isMarked = true;
+                    }
+                    var bgStyle = "";
+                    if (isMarked) {
+                        bgStyle = "background-color: yellow;";
+                    }
+                    res = res + `<div line_num='${i}' style='${bgStyle}'>${line}</div>`;
+                }
+                fileContent.innerHTML = res;
+                window.updateSlideBars(lines.length);
+
+                if (needResize) {
+                    window.scrollTo(0, 0);
+                    fileContent.scrollTop = 0;
+                    fileContent.scrollLeft = 0;
+                }
+
+                setTimeout(() => {
+                    window.hideLoading();
+                }, 200);
+            }, 200);
+        };
+
+        window.updateSlideBars = function(lineCnt) {
+            const fileContent = document.getElementById('fileContent');
+            const lineNumbers = document.getElementById('lineNumbers');
+            const markContents = document.getElementById('markContents');
+
+            const fileContentDivs = fileContent.children;
+            var lineCnt = fileContentDivs.length
+            const lineCntWidth = Math.ceil(Math.log10(lineCnt + 1)) * 10 + 10;
+            lineNumbers.style.width = `${lineCntWidth}px`;
+            let lineNumbersHTML = '';
+            let markContentsHTML = '';
+            for (let i = 0; i < lineCnt; i++) {
+                const lineDiv = fileContentDivs[i];
+                const line_num = lineDiv.getAttribute('line_num');
+                let isMarked = false;
+                let markContent = "";
+                if (window.markLines.hasOwnProperty(line_num)) {
+                    isMarked = true;
+                }
+                const lineHeight = lineDiv.offsetHeight;
+                var bgStyle = "";
+                if (isMarked) {
+                    bgStyle = "background-color: yellow;";
+                    markContent = window.markLines[line_num] || '';
+                }
+                lineNumbersHTML += `<div style="height: ${lineHeight}px; ${bgStyle}">${(Number(line_num) + 1)}</div>`;
+                markContentsHTML += `<div style="height: ${lineHeight}px; ${bgStyle}">${markContent}</div>`;
+            }
+            lineNumbers.innerHTML = lineNumbersHTML;
+            markContents.innerHTML = markContentsHTML;
+        };
+
+        window.addHighlightKeyWord = function () {
+            var keyword = window.htmlEncode(window.curSelectionText.trim().toLowerCase());
+            if (keyword.length <= 0 || window.highlightKeywords.hasOwnProperty(keyword)) {
+                return;
+            }
+            let allKeys = Object.keys(window.highlightKeywords);
+            const color = window.colorList[allKeys.length % window.colorList.length];
+            for (let i = 0; i < allKeys.length; i++) {
+                const item = allKeys[i];
+                if (keyword.includes(item)) {
+                    window.highlightKeywords[keyword] = window.highlightKeywords[item];
+                    window.retrainHighlightMatcher();
+                    window.decorate();
+                    return;
+                } else if (item.includes(keyword)) {
+                    return;
+                }
+            }
+            window.highlightKeywords[keyword] = color;
+            window.retrainHighlightMatcher();
+            window.decorate();
+        };
+        window.removeHighlightKeyWord = function () {
+            var keyword = window.curSelectionText.trim();
+            if (keyword.length <= 0 || !window.highlightKeywords.hasOwnProperty(keyword)) {
+                return;
+            }
+            delete window.highlightKeywords[keyword];
+            window.retrainHighlightMatcher();
+            window.decorate();
+        };
+        window.removeAllHighlightKeyWord = function () {
+            window.highlightKeywords = {};
+            window.retrainHighlightMatcher();
+            window.decorate();
+        };
+        window.retrainHighlightMatcher = function() {
+            if (window.highlightKeywords.length <= 0) {
+                window.highlightMatcher = null;
+                return;
+            }
+            window.highlightMatcher = new ACAutomaton();
+            let allKeys = Object.keys(window.highlightKeywords);
+            for (let i = 0; i < allKeys.length; i++) {
+                const item = allKeys[i];
+                window.highlightMatcher.insert(item);
+            }
+            window.highlightMatcher.train();
+        };
+        
+        window.showInputBox = function() {
+            const inputBox = document.getElementById('inputBox');
+            if (inputBox.style.display === 'none') {
+                document.getElementById('filterInput').value = window.filterRuleTexts.join(' ');
+                inputBox.style.display = 'block';
+                document.addEventListener('click', window.hideInputBoxOnClickOutside);
+            } else {
+                inputBox.style.display = 'none';
+                document.removeEventListener('click', window.hideInputBoxOnClickOutside);
+            }
+        }
+        window.hideInputBox = function() {
+            const inputBox = document.getElementById('inputBox');
+            inputBox.style.display = 'none';
+            document.removeEventListener('click', hideInputBoxOnClickOutside);
+        }
+        window.hideInputBoxOnClickOutside = function(event) {
+            const inputBox = document.getElementById('inputBox');
+            const filterText = document.getElementById('filterText');
+            if (!inputBox.contains(event.target) && event.target !== filterText) {
+                window.hideInputBox();
+            }
+        }
+        window.applyFilters = function() {
+            window.hideInputBox();
+            const filterInput = document.getElementById('filterInput').value.trim();
+            if (filterInput.length > 0) {
+                const keywords = filterInput.split('\n').map(keyword => keyword.trim()).filter(keyword => keyword.length > 0);
+                document.getElementById('filterText').innerText = keywords.join(' ');
+                window.filterRuleTexts = keywords;
+                window.filterRules = keywords.map(keyword => new RegExp(keyword, 'i'));
+            } else {
+                window.filterRules = [];
+            }
+            window.decorate(true);
+        }
+        window.cancelFilters = function() {
+            window.hideInputBox();
+        }
+
+        window.addMark = function() {
+            if (!window.curSelectionLine) {
+                return;
+            }
+            const input = prompt("Enter mark content for this line:");
+            if (input === null || input.trim() === "") {
+                return;
+            }
+            window.markLines[window.curSelectionLine] = input.trim();
+            window.decorate();
+        };
+        window.editMark = function() {
+            if (!window.curSelectionLine) {
+                return;
+            }
+            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) {
+                return;
+            }
+            oldContent = window.markLines[window.curSelectionLine];
+            const input = prompt("", oldContent);
+            if (input === null || input.trim() === "") {
+                return;
+            }
+            window.markLines[window.curSelectionLine] = input.trim();
+            window.decorate();
+        };
+        window.removeMark = function() {
+            if (!window.curSelectionLine) {
+                return;
+            }
+            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) {
+                return;
+            }
+            delete window.markLines[window.curSelectionLine];
+            window.decorate();
+        };
+
+        window.hiddenBefore = function() {
+            if (!window.curSelectionLine) {
+                return;
+            }
+            window.visibleLinesStart = Number(curSelectionLine);
+            window.decorate(true);
+        };
+        window.hiddenAfter = function() {
+            if (!window.curSelectionLine) {
+                return;
+            }
+            window.visibleLinesEnd = Number(window.curSelectionLine);
+            window.decorate(true);
+        };
+        window.setVisibleStart = function() {
+            var newLineNum = window.visibleLinesStart
+            const input = prompt("Enter the starting line number:", window.visibleLinesStart > 0 ? (Number(window.visibleLinesStart) + 1) : "");
+            if (input !== null && !isNaN(input) && Number(input) > 0) {
+                newLineNum = Number(input) - 1;
+            } else if (input === null || input === "") {
+                newLineNum = -1;
+            }
+            if (newLineNum !== window.visibleLinesStart) {
+                window.visibleLinesStart = newLineNum;
+                window.decorate(true);
+            }
+        };
+        window.setVisibleEnd = function() {
+            var newLineNum = window.visibleLinesEnd
+            const input = prompt("Enter the ending line number:", window.visibleLinesEnd > 0 ? (Number(window.visibleLinesEnd) + 1) : "");
+            if (input !== null && !isNaN(input) && Number(input) > 0) {
+                newLineNum = Number(input) - 1;
+            } else if (input === null || input === "") {
+                newLineNum = -1;
+            }
+            if (newLineNum !== window.visibleLinesEnd) {
+                window.visibleLinesEnd = newLineNum;
+                window.decorate(true);
+            }
+        };
+
+        window.export = function() {
+            var fileName = prompt("Enter the file name for export:", "exported_file.html");
+            if (!fileName) {
+                return;
+            }
+            var newHtmlContent = document.getElementById('realContent').innerHTML;
+            
+            newHtmlContent = `<html>
+    <head>
+        <meta charset=\"UTF-8\">
+        <style>
+            #lineNumbers div, #fileContent div, #markContents div {
+                font-size: 16px;
+                line-height: 1.5;
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            #fileContent span {
+                line-height: inherit;
+            }
+        </style>
+    </head>
+    <body>` + newHtmlContent + "</body></html>";
+            const blob = new Blob([newHtmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        window.htmlEncode = function(text) {
+            return text.replace(/&/g, '&amp;')
+                       .replace(/</g, '&lt;')
+                       .replace(/>/g, '&gt;')
+                       .replace(/"/g, '&quot;')
+                       .replace(/'/g, '&#39;');
+        };
+    </script>
+</body>
+</html>
