@@ -58,7 +58,7 @@
     </div>
     <div id="bar" style="position: fixed; top: 0; left: 0; width: 100%; background-color: white; z-index: 1000; padding: 10px; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); display: flex; gap: 10px; align-items: center;">
         <button id="openButton">Select File</button>
-        <div id="fileNameDiv"></div>
+        <button id="importButton">Import From Clipboard</button>
         <input type="file" id="fileInput" style="display: none;">
         <div style="width: 20pt;"></div>
         <div id="visibleRange" style="display: flex; align-items: center; gap: 5px;">
@@ -84,7 +84,10 @@
             </div>
             </div>
         </div>
-        <button id="newButton" onclick="window.export()" style="margin-left: auto;">Export</button>
+        <div style="margin-left: auto; display: flex; gap: 10px;">
+            <button id="copyButton" onclick="window.copyContent()">Copy Content</button>
+            <button id="exportButton" onclick="window.export()">Export</button>
+        </div>
         <div style="width: 10pt;"></div>
     </div>
     </br>
@@ -200,6 +203,7 @@
             menu.classList.remove('active');
         })
         const openButton = document.getElementById('openButton');
+        const importButton = document.getElementById('importButton');
         const fileInput = document.getElementById('fileInput');
         const fileContent = document.getElementById('fileContent');
         window.colorList = [
@@ -214,8 +218,9 @@
         window.markLines = {};
         window.visibleLinesStart = -1;
         window.visibleLinesEnd = -1;
-        window.curFileName = "";
+        window.curFilePath = null;
         window.highlightMatcher = null;
+        window.plainContents = [];
 
         window.showLoading = function () {
             const overlay = document.getElementById('fullscreenOverlay');
@@ -236,7 +241,8 @@
         fileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
-                window.curFileName = file.name;
+                window.curFilePath = file.name;
+                document.title = file.name;
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     window.onFileChanged(e.target.result);
@@ -254,13 +260,29 @@
             event.preventDefault();
             const file = event.dataTransfer.files[0];
             if (file) {
-                window.curFileName = file.name;
+                window.curFilePath = file.name;
+                document.title = file.name;
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     window.onFileChanged(e.target.result);
                 };
                 reader.readAsText(file);
             }
+        });
+
+        importButton.addEventListener('click', () => {
+            navigator.clipboard.readText().then((text) => {
+                if (text) {
+                    const truncatedText = text.substring(0, 50);
+                    document.title = truncatedText;
+                    window.onFileChanged(text);
+                } else {
+                    alert("Clipboard is empty or could not read text.");
+                }
+            }).catch((err) => {
+                console.error("Failed to read clipboard contents: ", err);
+                alert("Failed to read clipboard contents.");
+            });
         });
 
         window.onFileChanged = function(content) {
@@ -275,6 +297,7 @@
             window.visibleLinesEnd = -1;
             window.highlightMatcher = null;
             window.filterRuleTexts = [];
+            window.plainContents = [];
             window.decorate(true);
         };
 
@@ -320,8 +343,6 @@
             window.showLoading();
 
             setTimeout(() => {
-                document.getElementById('fileNameDiv').innerText = window.curFileName;
-
                 const visibleStartInput = document.getElementById('visibleStart');
                 const visibleEndInput = document.getElementById('visibleEnd');
                 visibleStartInput.innerText = window.visibleLinesStart > 0 ? (Number(window.visibleLinesStart) + 1) : 'start';
@@ -330,6 +351,7 @@
                 var content = window.originContent;
                 var lines = content.split('\n');
                 var res = "";
+                window.plainContents = [];
                 for (var i = 0; i < lines.length; i++) {
                     if (window.visibleLinesStart > 0 && i < window.visibleLinesStart) {
                         continue;
@@ -341,6 +363,7 @@
                     if (!window.filterDecorate(line, i)) {
                         continue;
                     }
+                    window.plainContents.push(line);
                     line = window.htmlEncode(line);
                     line = window.highlightDecorate(line, i);
                     var isMarked = false;
@@ -568,8 +591,26 @@
             }
         };
 
+        window.copyContent = function() {
+            navigator.clipboard.writeText(window.plainContents.join('\n')).then(() => {
+                alert("Content copied to clipboard!");
+            }).catch(err => {
+                console.error("Failed to copy content: ", err);
+            });
+        }
+
         window.export = function() {
-            var fileName = prompt("Enter the file name for export:", "exported_file.html");
+            let exportFileName = window.curFilePath
+            if (exportFileName) {
+                const lastDotIndex = exportFileName.lastIndexOf('.');
+                if (lastDotIndex > 0) {
+                    exportFileName = exportFileName.substring(0, lastDotIndex);
+                }
+                exportFileName = `${exportFileName}_export.html`;
+            } else {
+                exportFileName = `${Date.now().toString()}_export.html`;
+            }
+            var fileName = prompt("Enter the file name for export:", exportFileName);
             if (!fileName) {
                 return;
             }
