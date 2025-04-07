@@ -505,6 +505,8 @@
                 window.filterRuleTexts = keywords;
                 window.filterRules = keywords.map(keyword => new RegExp(keyword, 'i'));
             } else {
+                document.getElementById('filterText').innerText = "";
+                window.filterRuleTexts = [];
                 window.filterRules = [];
             }
             window.decorate(true);
