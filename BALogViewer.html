@@ -210,6 +210,7 @@
             'red', 'green', 'orange', 'cyan', 'magenta', 'lime', '#b3d9ff', '#b3b3ff', '#ffb3ff'
         ]
         window.originContent = "";
+        window.highlightIndex = 0;
         window.highlightKeywords = {};
         window.curSelectionText = null;
         window.filterRules = [];
@@ -291,6 +292,7 @@
             document.getElementById('filterText').innerText = '';
             window.originContent = content;
             window.highlightKeywords = {};
+            window.highlightIndex = 0;
             window.filterRules = [];
             window.markLines = {};
             window.visibleLinesStart = -1;
@@ -429,7 +431,8 @@
                 return;
             }
             let allKeys = Object.keys(window.highlightKeywords);
-            const color = window.colorList[allKeys.length % window.colorList.length];
+            const color = window.colorList[window.highlightIndex % window.colorList.length];
+            window.highlightIndex = window.highlightIndex + 1;
             for (let i = 0; i < allKeys.length; i++) {
                 const item = allKeys[i];
                 if (keyword.includes(item)) {
@@ -446,7 +449,7 @@
             window.decorate();
         };
         window.removeHighlightKeyWord = function () {
-            var keyword = window.curSelectionText.trim();
+            var keyword = window.curSelectionText.trim().toLowerCase();
             if (keyword.length <= 0 || !window.highlightKeywords.hasOwnProperty(keyword)) {
                 return;
             }
@@ -455,6 +458,7 @@
             window.decorate();
         };
         window.removeAllHighlightKeyWord = function () {
+            window.highlightIndex = 0;
             window.highlightKeywords = {};
             window.retrainHighlightMatcher();
             window.decorate();
