@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>双虚拟滚动文件查看器</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* 禁用滚动条 */
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .container {
+            display: flex;
+            height: 95vh;
+            border: 1px solid #ccc;
+        }
+
+        .line-numbers {
+            width: 60px;
+            background-color: #f5f5f5;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .line-marks {
+            width: 300px;
+            background-color: #f5f5f5;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .virtual-scroll {
+            position: relative;
+            will-change: transform;
+        }
+
+        .row {
+            height: 20px;
+            line-height: 20px;
+            position: absolute;
+            width: 100%;
+            white-space: nowrap;
+            font-family: monospace;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0 10px !important; /* 统一 padding */
+            /* overflow: hidden; */
+        }
+
+        .line-numbers .row {
+            text-align: right;
+            padding-right: 10px;
+            color: gray;
+        }
+
+        .line-marks .row {
+            text-align: left;
+            padding-right: 10px;
+            color: gray;
+        }
+
+        .content .row {
+            padding-left: 10px;
+        }
+
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            border-radius: 4px;
+            min-width: 160px;
+            z-index: 1000;
+            display: none; /* 默认隐藏 */
+        }
+
+        .menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: Arial;
+            font-size: 14px;
+            color: #333;
+            transition: background 0.2s;
+        }
+
+        .menu-item:hover {
+            background: #f5f5f5;
+        }
+
+        .divider {
+            height: 1px;
+            background: #eee;
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="fullscreenOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999;">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%; color: white; font-size: 24px; font-weight: bold;">
+            Loading...
+        </div>
+    </div>
+    <div id="contextMenu" class="context-menu">
+        <div class="menu-item" data-action="addHighlight">Add Highlight</div>
+        <div class="menu-item" data-action="removeHighlight">Remove Highlight</div>
+        <div class="menu-item" data-action="removeAllHighlight">Remove All Highlight</div>
+        <div class="divider"></div>
+        <div class="menu-item" data-action="addLineMark">Add Line Mark</div>
+        <div class="menu-item" data-action="editLineMark">Edit Line Mark</div>
+        <div class="menu-item" data-action="removeLineMark">Remove Line Mark</div>
+        <div class="divider"></div>
+        <div class="menu-item" data-action="hiddenBefore">Hidden Before Lines</div>
+        <div class="menu-item" data-action="hiddenAfter">Hidden After Lines</div>
+    </div>
+    <div id="bar" style="width: 100%; height: 5vh; border-bottom: 1px solid #ccc; background-color: white; display: flex; gap: 10px; align-items: center;">
+        <div style="width: 10pt;"></div>
+        <button id="openButton">Select File</button>
+        <button id="importButton">Import From Clipboard</button>
+        <input type="file" id="fileInput" style="display: none;">
+        <div style="width: 20pt;"></div>
+        <div id="visibleRange" style="display: flex; align-items: center; gap: 5px;">
+            <span>Visible Line Range:</span>
+            <div style="display: flex; align-items: center; gap: 5px; border: 1px solid black; padding: 5px; border-radius: 5px;">
+                <span>from</span>
+                <div id="visibleStart" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="scriptMain.setVisibleStart()">-</div>
+                <span>to</span>
+                <div id="visibleEnd" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="scriptMain.setVisibleEnd()">-</div>
+            </div>
+        </div>
+        <div style="width: 20pt;"></div>
+        <div id="filters" style="display: flex; align-items: center;">
+            Filters:
+            <div id="filterDropdown" style="position: relative; display: inline-block; margin-left: 10px;">
+            <div id="filterText" style="cursor: pointer; width: 500px; border: 1pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="scriptMain.showInputBox()"></div>
+            <div id="inputBox" style="display: none; position: absolute; top: 40px; left: 0; width: 500px; height: 100px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
+                <textarea id="filterInput" placeholder="Enter filter keywords here, each keyword perline, regex supported" style="width: 100%; height: 100%;"></textarea>
+                <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
+                    <button onclick="scriptMain.cancelFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+                <button onclick="scriptMain.applyFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                </div>
+            </div>
+            </div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 10px;">
+            <button id="copyButton" onclick="scriptMain.copyContent()">Copy Content</button>
+            <button id="exportButton" onclick="scriptMain.export()">Export</button>
+        </div>
+        <div style="width: 10pt;"></div>
+    </div>
+    <div class="container">
+        <div class="line-numbers" id="lineNumbers">
+            <div class="virtual-scroll" id="lineNumbersViewport"></div>
+        </div>
+        <div class="content" id="content">
+            <div class="virtual-scroll" id="contentViewport"></div>
+        </div>
+        <div class="line-marks" id="lineMarks">
+            <div class="virtual-scroll" id="lineMarksViewport"></div>
+        </div>
+    </div>
+
+    <script>
+        class ACTreeNode {
+            constructor() {
+                this.children = {};
+                this.failure = null;
+                this.patterns = [];
+            }
+        }
+        class ACAutomaton {
+            constructor() {
+                this.root = new ACTreeNode();
+            }
+            insert(pattern) {
+                let node = this.root;
+                for (let char of pattern.toLowerCase()) {
+                    if (!node.children[char]) {
+                        node.children[char] = new ACTreeNode();
+                    }
+                    node = node.children[char];
+                }
+                node.patterns.push(pattern);
+            }
+            train() {
+                let queue = [];
+                this.root.failure = this.root;
+                for (let char in this.root.children) {
+                    let child = this.root.children[char];
+                    child.failure = this.root;
+                    queue.push(child);
+                }
+                while (queue.length > 0) {
+                    let current = queue.shift();
+                    for (let char in current.children) {
+                        let child = current.children[char];
+                        let failure = current.failure;
+                        while (failure !== this.root && !failure.children[char]) {
+                            failure = failure.failure;
+                        }
+                        if (failure.children[char]) {
+                            child.failure = failure.children[char];
+                        } else {
+                            child.failure = this.root;
+                        }
+                        queue.push(child);
+                    }
+                }
+            }
+            search(text) {
+                let node = this.root;
+                let results = [];
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i].toLowerCase();
+                    while (node !== this.root && !node.children[char]) {
+                        node = node.failure;
+                    }
+                    if (node.children[char]) {
+                        node = node.children[char];
+                    } else {
+                        node = this.root;
+                    }
+
+                    let temp = node;
+                    while (temp !== this.root) {
+                        if (temp.patterns.length > 0) {
+                            for (let pattern of temp.patterns) {
+                                results.push({ pattern, index: i - pattern.length + 1 });
+                            }
+                        }
+                        temp = temp.failure;
+                    }
+                }
+                return results;
+            }
+        }
+        class Main {
+            constructor() {
+                // 配置参数
+                this.LINE_HEIGHT = 24;  // 预设行高
+                this.VISIBLE_BUFFER = 100;  // 渲染缓冲行数
+                
+                // DOM 元素
+                this.contentContainer = document.getElementById('content');
+                this.contentViewport = document.getElementById('contentViewport');
+                this.lineNumbersContainer = document.getElementById('lineNumbers');
+                this.lineNumbersViewport = document.getElementById('lineNumbersViewport');
+                this.lineMarksContainer = document.getElementById('lineMarks');
+                this.lineMarksViewport = document.getElementById('lineMarksViewport');
+
+                this.colorList = ['red', 'green', 'orange', 'cyan', 'magenta', 'lime', '#b3d9ff', '#b3b3ff', '#ffb3ff']
+                
+                // 数据存储
+                this.contentLines = [];
+                this.lineNumLines = [];
+                this.lineMarkLines = [];
+                this.visibleNodes = new Map();  // 缓存已创建的DOM节点
+                this.curFilePath = null;
+                this.originContent = "";
+                this.highlightIndex = 0;
+                this.highlightKeywords = {};
+                this.curSelectionText = null;
+                this.filterRules = [];
+                this.filterRuleTexts = [];
+                this.lineNumbers = document.getElementById('lineNumbers');
+                this.markLines = {};
+                this.visibleLinesStart = -1;
+                this.visibleLinesEnd = -1;
+                this.curFilePath = null;
+                this.highlightMatcher = null;
+                this.plainContents = [];
+                this.curSelectionLine = "";
+                
+                // 性能优化
+                this.lastRenderTime = 0;
+                this.rafId = null;
+                let isSyncingScroll = false;
+                
+                this.initEventListeners();
+            }
+
+            // 初始化事件监听
+            initEventListeners() {
+                document.getElementById('openButton').addEventListener('click', () => {
+                    document.getElementById('fileInput').click();
+                });
+                document.getElementById('importButton').addEventListener('click', () => {
+                    navigator.clipboard.readText().then((text) => {
+                        if (text) {
+                            const truncatedText = text.substring(0, 50);
+                            document.title = truncatedText;
+                            this.onFileChanged(text);
+                        } else {
+                            alert("Clipboard is empty or could not read text.");
+                        }
+                    }).catch((err) => {
+                        console.error("Failed to read clipboard contents: ", err);
+                        alert("Failed to read clipboard contents.");
+                    });
+                });
+                // 文件选择监听
+                document.getElementById('fileInput').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.curFilePath = file.name;
+                        document.title = file.name;
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.onFileChanged(e.target.result);
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+                
+                // 滚动事件（带防抖）
+                this.contentContainer.addEventListener('scroll', () => { this.handleContentScroll()});
+                this.contentContainer.addEventListener('scrollend', () => { this.handleContentScroll()});
+                this.lineNumbersContainer.addEventListener('scroll', () => { this.handleLineNumbersScroll()});
+                this.lineNumbersContainer.addEventListener('scrollend', () => { this.handleLineNumbersScroll()});
+                this.lineMarksContainer.addEventListener('scroll', () => { this.handleLineMarksScroll()});
+                this.lineMarksContainer.addEventListener('scrollend', () => { this.handleLineMarksScroll()});
+
+                // 右键点击事件
+                document.addEventListener('contextmenu', (e) => {
+                    const selection = window.getSelection();
+                    const selectedDiv = selection.anchorNode.parentNode;
+                    this.curSelectionLine = selectedDiv.getAttribute('line_num');
+                    if (!this.curSelectionLine) {
+                        let parentDiv = selectedDiv.parentNode;
+                        while (parentDiv && !parentDiv.getAttribute('line_num')) {
+                            parentDiv = parentDiv.parentNode;
+                        }
+                        if (parentDiv) {
+                            this.curSelectionLine = parentDiv.getAttribute('line_num');
+                        }
+                    }
+                    this.curSelectionText = selection.toString();
+                    if (selection.rangeCount <= 0) {
+                        return
+                    }
+                    if (!this.curSelectionText) {
+                        return;
+                    }
+
+                    e.preventDefault(); // 阻止默认菜单
+
+                    // 显示菜单
+                    const menu = document.getElementById('contextMenu');
+                    menu.style.display = 'block';
+                    
+                    // 定位逻辑（防止超出视口）
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    const menuWidth = menu.offsetWidth;
+                    const menuHeight = menu.offsetHeight;
+
+                    let x = e.pageX;
+                    let y = e.pageY;
+
+                    // 横向边界检测
+                    if (x + menuWidth > viewportWidth) {
+                        x = viewportWidth - menuWidth - 5;
+                    }
+
+                    // 纵向边界检测
+                    if (y + menuHeight > viewportHeight) {
+                        y = viewportHeight - menuHeight - 5;
+                    }
+
+                    menu.style.left = x + 'px';
+                    menu.style.top = y + 'px';
+                });
+
+                // 点击关闭菜单
+                document.addEventListener('click', (e) => {
+                    const menu = document.getElementById('contextMenu');
+                    if (!menu.contains(e.target)) {
+                        menu.style.display = 'none';
+                    }
+                });
+
+                // 菜单项点击处理
+                document.getElementById('contextMenu').querySelectorAll('.menu-item').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        const action = e.target.dataset.action;
+                        document.getElementById('contextMenu').style.display = 'none';
+                        
+                        switch(action) {
+                            case 'addHighlight':
+                                this.addHighlightKeyWord();
+                                break;
+                            case 'removeHighlight':
+                                this.removeHighlightKeyWord();
+                                break;
+                            case 'removeAllHighlight':
+                                this.removeAllHighlightKeyWord();
+                                break;
+                            case 'addLineMark':
+                                this.addLineMark();
+                                break;
+                            case 'editLineMark':
+                                this.editLineMark();
+                                break;
+                            case 'removeLineMark':
+                                this.removeLineMark();
+                                break;
+                            case 'hiddenBefore':
+                                this.hiddenBefore();
+                                break;
+                            case 'hiddenAfter':
+                                this.hiddenAfter();
+                                break;
+                        }
+                    });
+                });
+            }
+
+            initScrollArea(viewport, data, height) {
+                viewport.style.height = `${height}px`;
+                viewport._data = data;
+                viewport._pool = [];
+            }
+
+            handleContentScroll() {
+                if (this.isSyncingScroll) {
+                    return;
+                }
+                this.isSyncingScroll = true;
+                this.lineNumbersContainer.scrollTop = this.contentContainer.scrollTop;
+                this.lineMarksContainer.scrollTop = this.contentContainer.scrollTop;
+                this.isSyncingScroll = false;
+                this.requestRender();
+            }
+
+            handleLineNumbersScroll() {
+                if (this.isSyncingScroll) {
+                    return;
+                }
+                this.isSyncingScroll = true;
+                this.contentContainer.scrollTop = this.lineNumbersContainer.scrollTop;
+                this.lineMarksContainer.scrollTop = this.lineNumbersContainer.scrollTop;
+                this.isSyncingScroll = false;
+                this.requestRender();
+            }
+
+            handleLineMarksScroll() {
+                if (this.isSyncingScroll) {
+                    return;
+                }
+                this.isSyncingScroll = true;
+                this.contentContainer.scrollTop = this.lineMarksContainer.scrollTop;
+                this.lineNumbersContainer.scrollTop = this.lineMarksContainer.scrollTop;
+                this.isSyncingScroll = false;
+                this.requestRender();
+            }
+
+            updateVisibleRows(linesCnt, scrollTop, clientHeight, viewport, useHtml=false) {
+                const startIdx = Math.max(
+                    0, 
+                    Math.floor(scrollTop / this.LINE_HEIGHT) - this.VISIBLE_BUFFER
+                );
+                
+                const endIdx = Math.min(
+                    linesCnt - 1,
+                    Math.ceil((scrollTop + clientHeight) / this.LINE_HEIGHT) + this.VISIBLE_BUFFER
+                );
+                
+                // 节点复用逻辑
+                const pool = viewport._pool;
+                const data = viewport._data;
+                
+                // 标记已使用的节点
+                const activeNodes = new Set();
+                
+                for (let i = startIdx; i <= endIdx; i++) {
+                    const item = data[i];
+                    let node = pool.find(n => n.index === i);
+                    
+                    if (!node) {
+                        node = document.createElement('div');
+                        node.className = 'row';
+                        node.style.transform = `translateY(${i * this.LINE_HEIGHT}px)`;
+                        node.index = i;
+                        viewport.appendChild(node);
+                        pool.push(node);
+                    }
+                    if (useHtml) {
+                        node.innerHTML = item;
+                    } else {
+                        node.textContent = item;
+                    }
+                    activeNodes.add(node);
+                }
+
+                // 清理不可见节点
+                pool.forEach(node => {
+                    if (!activeNodes.has(node) && 
+                        (node.index < startIdx || node.index > endIdx)) {
+                        viewport.removeChild(node);
+                    }
+                });
+
+                // 更新池数组
+                viewport._pool = pool.filter(node => node.isConnected);
+            }
+
+            onFileChanged(content) {
+                document.getElementById('visibleStart').innerText = '-';
+                document.getElementById('visibleEnd').innerText = '-';
+                document.getElementById('filterText').innerText = '';
+                this.originContent = content;
+                this.highlightKeywords = {};
+                this.highlightIndex = 0;
+                this.filterRules = [];
+                this.markLines = {};
+                this.visibleLinesStart = -1;
+                this.visibleLinesEnd = -1;
+                this.highlightMatcher = null;
+                this.filterRuleTexts = [];
+                this.plainContents = [];
+                this.decorate(true);
+            };
+
+            decorate(needResize = false) {
+                this.showLoading();
+
+                setTimeout(() => {
+                    const visibleStartInput = document.getElementById('visibleStart');
+                    const visibleEndInput = document.getElementById('visibleEnd');
+                    visibleStartInput.innerText = this.visibleLinesStart > 0 ? (Number(this.visibleLinesStart) + 1) : 'start';
+                    visibleEndInput.innerText = this.visibleLinesEnd > 0 ? (Number(this.visibleLinesEnd) + 1) : 'end';
+
+                    this.contentLines = [];
+                    this.lineNumLines = [];
+                    this.lineMarkLines = [];
+                    this.visibleNodes = new Map();
+                    var content = this.originContent;
+                    var lines = content.split('\n');
+                    var res = "";
+                    this.plainContents = [];
+                    for (var i = 0; i < lines.length; i++) {
+                        if (this.visibleLinesStart > 0 && i < this.visibleLinesStart) {
+                            continue;
+                        }
+                        if (this.visibleLinesEnd > 0 && i > this.visibleLinesEnd) {
+                            continue;
+                        }
+                        var line = lines[i];
+                        if (!this.filterDecorate(line, i)) {
+                            continue;
+                        }
+                        this.plainContents.push(line);
+                        line = this.htmlEncode(line);
+                        line = this.highlightDecorate(line, i);
+                        var isMarked = false;
+                        var markContent = null;
+                        if (this.markLines.hasOwnProperty(i)) {
+                            isMarked = true;
+                            markContent = this.markLines[i];
+                        }
+                        var bgStyle = "";
+                        if (isMarked) {
+                            bgStyle = "background-color: yellow;";
+                            this.lineMarkLines.push(`<span style="background-color: yellow;">${markContent}</spam>`);
+                        } else {
+                            this.lineMarkLines.push("");
+                        }
+                        this.contentLines.push(`<span line_num='${i}' style='${bgStyle}'>${line}</span>`);
+                        this.lineNumLines.push(`${i + 1}`);
+                    }
+
+                    // 设置总高度
+                    const totalHeight = this.contentLines.length * this.LINE_HEIGHT;
+                    this.initScrollArea(this.contentViewport, this.contentLines, totalHeight);
+                    this.initScrollArea(this.lineNumbersViewport, this.lineNumLines, totalHeight);
+                    this.initScrollArea(this.lineMarksViewport, this.lineMarkLines, totalHeight);
+                    
+                    // 初始渲染
+                    this.requestRender();
+
+                    if (needResize) {
+                        this.contentContainer.scrollTo(0, 0);
+                        this.lineMarksContainer.scrollTo(0, 0);
+                        this.lineNumbersContainer.scrollTo(0, 0);
+                    }
+
+                    setTimeout(() => {
+                        this.hideLoading();
+                    }, 200);
+                }, 200);
+            };
+
+            filterDecorate(lineText, lineNum) {
+                if (this.filterRules.length <= 0) {
+                    return true;
+                }
+                var res = true;
+                for (var i = 0; i < this.filterRules.length; i++) {
+                    var rule = this.filterRules[i];
+                    if (!rule.test(lineText)) {
+                        res = false;
+                        break;
+                    }
+                }
+                return res;
+            };
+
+            highlightDecorate(lineText, lineNum) {
+                if (!this.highlightMatcher) {
+                    return lineText;
+                }
+                var res = lineText;
+                const matches = this.highlightMatcher.search(lineText);
+                if (matches.length <= 0) {
+                    return res;
+                }
+                let offset = 0;
+                for (const match of matches) {
+                    const keyword = match.pattern;
+                    const color = this.highlightKeywords[keyword];
+                    if (!color) {
+                        continue;
+                    }
+                    const colorHead = `<span style="background-color: ${color};">`;
+                    const colorTail = '</span>';
+                    res = res.substring(0, match.index + offset) + colorHead + res.substring(match.index + offset, match.index + offset + match.pattern.length) + colorTail + res.substring(match.index + offset + match.pattern.length);
+                    offset += colorHead.length + colorTail.length;
+                }
+                return res;
+            };
+
+            // 请求渲染（带节流）
+            requestRender() {
+                // const now = Date.now();
+                // if (now - this.lastRenderTime < 16) {  // 60fps节流
+                //     if (this.rafId) cancelAnimationFrame(this.rafId);
+                //     this.rafId = requestAnimationFrame(() => this.requestRender());
+                //     return;
+                // }
+                
+                const allLen = this.lineMarkLines.length;
+                const scrollTop = this.contentContainer.scrollTop;
+                const clientHeight = this.contentContainer.clientHeight;
+                this.updateVisibleRows(allLen, scrollTop, clientHeight, this.contentViewport, true);
+                this.updateVisibleRows(allLen, scrollTop, clientHeight, this.lineNumbersViewport);
+                this.updateVisibleRows(allLen, scrollTop, clientHeight, this.lineMarksViewport, true);
+
+                // this.lastRenderTime = now;
+            }
+
+            // 显示加载状态
+            showLoading() {
+                const overlay = document.getElementById('fullscreenOverlay');
+                overlay.style.display = 'block';
+            }
+
+            // 隐藏加载状态
+            hideLoading() {
+                const overlay = document.getElementById('fullscreenOverlay');
+                overlay.style.display = 'none';
+            }
+
+            htmlEncode(text) {
+                return text.replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+            };
+
+            addHighlightKeyWord() {
+                var keyword = this.htmlEncode(this.curSelectionText.trim().toLowerCase());
+                if (keyword.length <= 0 || this.highlightKeywords.hasOwnProperty(keyword)) {
+                    return;
+                }
+                let allKeys = Object.keys(this.highlightKeywords);
+                const color = this.colorList[this.highlightIndex % this.colorList.length];
+                this.highlightIndex = this.highlightIndex + 1;
+                for (let i = 0; i < allKeys.length; i++) {
+                    const item = allKeys[i];
+                    if (keyword.includes(item)) {
+                        this.highlightKeywords[keyword] = this.highlightKeywords[item];
+                        delete this.highlightKeywords[item];
+                        this.retrainHighlightMatcher();
+                        this.decorate();
+                        return;
+                    } else if (item.includes(keyword)) {
+                        return;
+                    }
+                }
+                this.highlightKeywords[keyword] = color;
+                this.retrainHighlightMatcher();
+                this.decorate();
+            };
+            removeHighlightKeyWord() {
+                var keyword = this.curSelectionText.trim().toLowerCase();
+                if (keyword.length <= 0 || !this.highlightKeywords.hasOwnProperty(keyword)) {
+                    return;
+                }
+                delete this.highlightKeywords[keyword];
+                this.retrainHighlightMatcher();
+                this.decorate();
+            };
+            removeAllHighlightKeyWord() {
+                this.highlightIndex = 0;
+                this.highlightKeywords = {};
+                this.retrainHighlightMatcher();
+                this.decorate();
+            };
+            retrainHighlightMatcher = function() {
+                if (this.highlightKeywords.length <= 0) {
+                    this.highlightMatcher = null;
+                    return;
+                }
+                this.highlightMatcher = new ACAutomaton();
+                let allKeys = Object.keys(this.highlightKeywords);
+                for (let i = 0; i < allKeys.length; i++) {
+                    const item = allKeys[i];
+                    this.highlightMatcher.insert(item);
+                }
+                this.highlightMatcher.train();
+            };
+
+            hiddenBefore() {
+                if (!this.curSelectionLine) {
+                    return;
+                }
+                this.visibleLinesStart = Number(this.curSelectionLine);
+                this.decorate(true);
+            };
+            hiddenAfter() {
+                if (!this.curSelectionLine) {
+                    return;
+                }
+                this.visibleLinesEnd = Number(this.curSelectionLine);
+                this.decorate(true);
+            };
+            setVisibleStart() {
+                var newLineNum = this.visibleLinesStart
+                const input = prompt("Enter the starting line number:", this.visibleLinesStart > 0 ? (Number(this.visibleLinesStart) + 1) : "");
+                if (input !== null && !isNaN(input) && Number(input) > 0) {
+                    newLineNum = Number(input) - 1;
+                } else if (input === null || input === "") {
+                    newLineNum = -1;
+                }
+                if (newLineNum !== this.visibleLinesStart) {
+                    this.visibleLinesStart = newLineNum;
+                    this.decorate(true);
+                }
+            };
+            setVisibleEnd() {
+                var newLineNum = this.visibleLinesEnd
+                const input = prompt("Enter the ending line number:", this.visibleLinesEnd > 0 ? (Number(this.visibleLinesEnd) + 1) : "");
+                if (input !== null && !isNaN(input) && Number(input) > 0) {
+                    newLineNum = Number(input) - 1;
+                } else if (input === null || input === "") {
+                    newLineNum = -1;
+                }
+                if (newLineNum !== this.visibleLinesEnd) {
+                    this.visibleLinesEnd = newLineNum;
+                    this.decorate(true);
+                }
+            };
+
+            addLineMark() {
+                if (!this.curSelectionLine) {
+                    return;
+                }
+                const input = prompt("Enter mark content for this line:");
+                if (input === null || input.trim() === "") {
+                    return;
+                }
+                this.markLines[this.curSelectionLine] = input.trim();
+                this.decorate();
+            };
+            editLineMark() {
+                if (!this.curSelectionLine) {
+                    return;
+                }
+                if (!this.markLines.hasOwnProperty(this.curSelectionLine)) {
+                    return;
+                }
+                const oldContent = this.markLines[this.curSelectionLine];
+                const input = prompt("", oldContent);
+                if (input === null || input.trim() === "") {
+                    return;
+                }
+                this.markLines[this.curSelectionLine] = input.trim();
+                this.decorate();
+            };
+            removeLineMark() {
+                if (!this.curSelectionLine) {
+                    return;
+                }
+                if (!this.markLines.hasOwnProperty(this.curSelectionLine)) {
+                    return;
+                }
+                delete this.markLines[this.curSelectionLine];
+                this.decorate();
+            };
+        }
+        const main = new Main();
+    </script>
+</body>
+</html>
