@@ -480,7 +480,7 @@
         window.showInputBox = function() {
             const inputBox = document.getElementById('inputBox');
             if (inputBox.style.display === 'none') {
-                document.getElementById('filterInput').value = window.filterRuleTexts.join(' ');
+                document.getElementById('filterInput').value = window.filterRuleTexts.join('\n');
                 inputBox.style.display = 'block';
                 document.addEventListener('click', window.hideInputBoxOnClickOutside);
             } else {
