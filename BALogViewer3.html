@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>双虚拟滚动文件查看器</title>
+    <title>BALogViewer</title>
     <style>
         html, body {
             margin: 0;
@@ -23,14 +23,14 @@
         .line-numbers {
             width: 60px;
             background-color: #f5f5f5;
-            overflow-y: auto;
+            overflow-y: hidden;
             position: relative;
         }
 
         .line-marks {
-            width: 300px;
+            width: 200px;
             background-color: #f5f5f5;
-            overflow-y: auto;
+            overflow-y: hidden;
             position: relative;
         }
 
@@ -131,30 +131,35 @@
         <div style="width: 20pt;"></div>
         <div id="visibleRange" style="display: flex; align-items: center; gap: 5px;">
             <span>Visible Line Range:</span>
-            <div style="display: flex; align-items: center; gap: 5px; border: 1px solid black; padding: 5px; border-radius: 5px;">
+            <div style="display: flex; align-items: center; gap: 5px; border: 0.5px solid black; padding: 5px; border-radius: 5px;">
                 <span>from</span>
-                <div id="visibleStart" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="scriptMain.setVisibleStart()">-</div>
+                <div id="visibleStart" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="main.setVisibleStart()">-</div>
                 <span>to</span>
-                <div id="visibleEnd" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="scriptMain.setVisibleEnd()">-</div>
+                <div id="visibleEnd" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="main.setVisibleEnd()">-</div>
             </div>
         </div>
         <div style="width: 20pt;"></div>
         <div id="filters" style="display: flex; align-items: center;">
             Filters:
             <div id="filterDropdown" style="position: relative; display: inline-block; margin-left: 10px;">
-            <div id="filterText" style="cursor: pointer; width: 500px; border: 1pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="scriptMain.showInputBox()"></div>
-            <div id="inputBox" style="display: none; position: absolute; top: 40px; left: 0; width: 500px; height: 100px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
-                <textarea id="filterInput" placeholder="Enter filter keywords here, each keyword perline, regex supported" style="width: 100%; height: 100%;"></textarea>
-                <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
-                    <button onclick="scriptMain.cancelFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
-                <button onclick="scriptMain.applyFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                <div id="filterText" style="cursor: pointer; width: 300px; border: 0.5pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="main.showInputBox()"></div>
+                <div id="inputBox" style="display: none; position: absolute; top: 40px; left: 0; width: 300px; height: 100px; background-color: white; border: 0.5px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
+                    <textarea id="filterInput" placeholder="Enter filter keywords here, each keyword perline, regex supported" style="width: 100%; height: 100%;"></textarea>
+                    <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
+                        <button onclick="main.cancelFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+                    <button onclick="main.applyFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                    </div>
                 </div>
-            </div>
             </div>
         </div>
         <div style="margin-left: auto; display: flex; gap: 10px;">
-            <button id="copyButton" onclick="scriptMain.copyContent()">Copy Content</button>
-            <button id="exportButton" onclick="scriptMain.export()">Export</button>
+            <!-- <div id="searchs" style="display: flex; align-items: center;">
+                <input id="searchText" style="cursor: pointer; width: 100px; border: 0.5pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></input>
+                <div style="width: 5pt;"></div>
+                <button id="searchButton" onclick="main.search()">Search</button>
+            </div>
+            <div style="width: 10pt;"></div> -->
+            <button id="exportButton" onclick="main.export()">Export</button>
         </div>
         <div style="width: 10pt;"></div>
     </div>
@@ -280,6 +285,7 @@
                 this.highlightMatcher = null;
                 this.plainContents = [];
                 this.curSelectionLine = "";
+                this.searchKeyword = null;
                 
                 // 性能优化
                 this.lastRenderTime = 0;
@@ -325,10 +331,6 @@
                 // 滚动事件（带防抖）
                 this.contentContainer.addEventListener('scroll', () => { this.handleContentScroll()});
                 this.contentContainer.addEventListener('scrollend', () => { this.handleContentScroll()});
-                this.lineNumbersContainer.addEventListener('scroll', () => { this.handleLineNumbersScroll()});
-                this.lineNumbersContainer.addEventListener('scrollend', () => { this.handleLineNumbersScroll()});
-                this.lineMarksContainer.addEventListener('scroll', () => { this.handleLineMarksScroll()});
-                this.lineMarksContainer.addEventListener('scrollend', () => { this.handleLineMarksScroll()});
 
                 // 右键点击事件
                 document.addEventListener('contextmenu', (e) => {
@@ -423,12 +425,47 @@
                         }
                     });
                 });
+
+                document.addEventListener('dragover', (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'copy';
+                });
+
+                document.addEventListener('drop', (event) => {
+                    event.preventDefault();
+                    const file = event.dataTransfer.files[0];
+                    if (file) {
+                        this.curFilePath = file.name;
+                        document.title = file.name;
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.onFileChanged(e.target.result);
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+
+                document.getElementById('importButton').addEventListener('click', () => {
+                    navigator.clipboard.readText().then((text) => {
+                        if (text) {
+                            const truncatedText = text.substring(0, 50);
+                            document.title = truncatedText;
+                            this.onFileChanged(text);
+                        } else {
+                            alert("Clipboard is empty or could not read text.");
+                        }
+                    }).catch((err) => {
+                        console.error("Failed to read clipboard contents: ", err);
+                        alert("Failed to read clipboard contents.");
+                    });
+                });
             }
 
             initScrollArea(viewport, data, height) {
                 viewport.style.height = `${height}px`;
                 viewport._data = data;
                 viewport._pool = [];
+                viewport.innerHTML = '';
             }
 
             handleContentScroll() {
@@ -438,28 +475,6 @@
                 this.isSyncingScroll = true;
                 this.lineNumbersContainer.scrollTop = this.contentContainer.scrollTop;
                 this.lineMarksContainer.scrollTop = this.contentContainer.scrollTop;
-                this.isSyncingScroll = false;
-                this.requestRender();
-            }
-
-            handleLineNumbersScroll() {
-                if (this.isSyncingScroll) {
-                    return;
-                }
-                this.isSyncingScroll = true;
-                this.contentContainer.scrollTop = this.lineNumbersContainer.scrollTop;
-                this.lineMarksContainer.scrollTop = this.lineNumbersContainer.scrollTop;
-                this.isSyncingScroll = false;
-                this.requestRender();
-            }
-
-            handleLineMarksScroll() {
-                if (this.isSyncingScroll) {
-                    return;
-                }
-                this.isSyncingScroll = true;
-                this.contentContainer.scrollTop = this.lineMarksContainer.scrollTop;
-                this.lineNumbersContainer.scrollTop = this.lineMarksContainer.scrollTop;
                 this.isSyncingScroll = false;
                 this.requestRender();
             }
@@ -641,12 +656,12 @@
 
             // 请求渲染（带节流）
             requestRender() {
-                // const now = Date.now();
-                // if (now - this.lastRenderTime < 16) {  // 60fps节流
-                //     if (this.rafId) cancelAnimationFrame(this.rafId);
-                //     this.rafId = requestAnimationFrame(() => this.requestRender());
-                //     return;
-                // }
+                const now = Date.now();
+                if (now - this.lastRenderTime < 16) {  // 60fps节流
+                    if (this.rafId) cancelAnimationFrame(this.rafId);
+                    this.rafId = requestAnimationFrame(() => this.requestRender());
+                    return;
+                }
                 
                 const allLen = this.lineMarkLines.length;
                 const scrollTop = this.contentContainer.scrollTop;
@@ -655,7 +670,7 @@
                 this.updateVisibleRows(allLen, scrollTop, clientHeight, this.lineNumbersViewport);
                 this.updateVisibleRows(allLen, scrollTop, clientHeight, this.lineMarksViewport, true);
 
-                // this.lastRenderTime = now;
+                this.lastRenderTime = now;
             }
 
             // 显示加载状态
@@ -717,7 +732,7 @@
                 this.retrainHighlightMatcher();
                 this.decorate();
             };
-            retrainHighlightMatcher = function() {
+            retrainHighlightMatcher() {
                 if (this.highlightKeywords.length <= 0) {
                     this.highlightMatcher = null;
                     return;
@@ -808,6 +823,95 @@
                 delete this.markLines[this.curSelectionLine];
                 this.decorate();
             };
+
+            showInputBox() {
+                const inputBox = document.getElementById('inputBox');
+                if (inputBox.style.display === 'none') {
+                    document.getElementById('filterInput').value = this.filterRuleTexts.join('\n');
+                    inputBox.style.display = 'block';
+                    document.addEventListener('click', this.hideInputBoxOnClickOutside);
+                } else {
+                    inputBox.style.display = 'none';
+                    document.removeEventListener('click', this.hideInputBoxOnClickOutside);
+                }
+            }
+            hideInputBox() {
+                const inputBox = document.getElementById('inputBox');
+                inputBox.style.display = 'none';
+                document.removeEventListener('click', this.hideInputBoxOnClickOutside);
+            }
+            hideInputBoxOnClickOutside(event) {
+                const inputBox = document.getElementById('inputBox');
+                const filterText = document.getElementById('filterText');
+                if (!inputBox.contains(event.target) && event.target !== filterText) {
+                    this.hideInputBox();
+                }
+            }
+            applyFilters() {
+                this.hideInputBox();
+                const filterInput = document.getElementById('filterInput').value.trim();
+                if (filterInput.length > 0) {
+                    const keywords = filterInput.split('\n').map(keyword => keyword.trim()).filter(keyword => keyword.length > 0);
+                    document.getElementById('filterText').innerText = keywords.join(' ');
+                    this.filterRuleTexts = keywords;
+                    this.filterRules = keywords.map(keyword => new RegExp(keyword, 'i'));
+                } else {
+                    document.getElementById('filterText').innerText = "";
+                    this.filterRuleTexts = [];
+                    this.filterRules = [];
+                }
+                this.decorate(true);
+            }
+            cancelFilters() {
+                this.hideInputBox();
+            }
+
+            search() {
+                const newKeyword = document.getElementById('searchText').innerText;
+            }
+
+            export() {
+                let exportFileName = this.curFilePath
+                if (exportFileName) {
+                    const lastDotIndex = exportFileName.lastIndexOf('.');
+                    if (lastDotIndex > 0) {
+                        exportFileName = exportFileName.substring(0, lastDotIndex);
+                    }
+                    exportFileName = `${exportFileName}_export.html`;
+                } else {
+                    exportFileName = `${Date.now().toString()}_export.html`;
+                }
+                var fileName = prompt("Enter the file name for export:", exportFileName);
+                if (!fileName) {
+                    return;
+                }
+                var newHtmlContent = document.getElementById('realContent').innerHTML;
+                
+                newHtmlContent = `<html>
+                <head>
+                    <meta charset=\"UTF-8\">
+                    <style>
+                        #lineNumbers div, #fileContent div, #markContents div {
+                            font-size: 16px;
+                            line-height: 1.5;
+                            margin: 0;
+                            padding: 0;
+                            box-sizing: border-box;
+                        }
+                        #fileContent span {
+                            line-height: inherit;
+                        }
+                    </style>
+                </head>
+                <body>` + newHtmlContent + "</body></html>";
+                const blob = new Blob([newHtmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
         }
         const main = new Main();
     </script>
