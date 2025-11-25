@@ -307,11 +307,11 @@
             if (window.filterRules.length <= 0) {
                 return true;
             }
-            var res = true;
+            var res = false;
             for (var i = 0; i < window.filterRules.length; i++) {
                 var rule = window.filterRules[i];
-                if (!rule.test(lineText)) {
-                    res = false;
+                if (rule.test(lineText)) {
+                    res = true;
                     break;
                 }
             }
