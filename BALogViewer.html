@@ -5,101 +5,366 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BALogViewer</title>
     <style>
+        * { box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
-        .menu{
-            position: absolute;
-            top:0px;
+        .menu {
+            position: fixed;
+            top: 0px;
             left: 0px;
             background: #fff;
             border: 1px solid #dadce0;
             visibility: hidden;
+            z-index: 2000;
         }
-        .active{
+        .active {
             visibility: visible;
         }
-        #lineNumbers div, #fileContent div, #markContents div {
+        .line-row {
             font-size: 16px;
             line-height: 1.5;
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-all;
         }
-        #fileContent span {
+        #bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: white;
+            z-index: 1000;
+            padding: 8px 10px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        #virtualContainer {
+            position: relative;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        #virtualSpacer {
+            position: relative;
+            width: 100%;
+        }
+        #visibleRows {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+        }
+        .row-container {
+            display: flex;
+            width: 100%;
+            position: absolute;
+            left: 0;
+        }
+        .line-num-cell {
+            flex-shrink: 0;
+            text-align: center;
+            padding-right: 5px;
+            color: gray;
+            border-right: 1px solid #ccc;
+            user-select: none;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .content-cell {
+            flex: 1;
+            padding-left: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-all;
+            min-width: 0;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .content-cell span {
             line-height: inherit;
+        }
+        .mark-cell {
+            flex-shrink: 0;
+            width: 200px;
+            background-color: #f4f4f4;
+            border-left: 1px solid #ccc;
+            color: gray;
+            padding-left: 5px;
+            white-space: nowrap;
+            overflow-x: auto;
+            user-select: none;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        /* 隐藏区间管理面板 */
+        .hidden-ranges-panel {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 3000;
+            width: 500px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .hidden-ranges-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        .hidden-range-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .hidden-range-item span { font-size: 14px; }
+        .hidden-range-item button {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .hidden-range-item button:hover { background: #d32f2f; }
+        .panel-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 2999;
+        }
+        .btn-add-range {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-add-range:hover { background: #388E3C; }
+        .btn-close-panel {
+            margin-top: 10px;
+            margin-left: 10px;
+            padding: 8px 16px;
+            background: #999;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-close-panel:hover { background: #777; }
+        .btn-clear-all {
+            margin-top: 10px;
+            margin-left: 10px;
+            padding: 8px 16px;
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-clear-all:hover { background: #e68900; }
+        .hidden-count-badge {
+            background: #f44336;
+            color: white;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 12px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .collapsed-row {
+            background: #fff3cd;
+            color: #856404;
+            text-align: center;
+            cursor: pointer;
+            font-style: italic;
+            font-size: 13px;
+            border-top: 1px dashed #ffc107;
+            border-bottom: 1px dashed #ffc107;
+            user-select: none;
+            line-height: 24px;
+            height: 24px;
+        }
+        .collapsed-row:hover { background: #ffe69c; }
+        /* 搜索栏 */
+        #searchBar {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 20px;
+            z-index: 4000;
+            background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            padding: 8px 12px;
+            align-items: center;
+            gap: 8px;
+        }
+        #searchBar.show { display: flex; }
+        #searchBar input {
+            width: 260px;
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+        #searchBar input:focus { border-color: #4CAF50; }
+        #searchBar .search-info {
+            font-size: 13px;
+            color: #666;
+            min-width: 70px;
+            text-align: center;
+        }
+        #searchBar button {
+            padding: 4px 10px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #searchBar button:hover { background: #e0e0e0; }
+        #searchBar .search-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #666;
+            padding: 2px 6px;
+        }
+        #searchBar .search-close:hover { color: #333; }
+        .search-highlight-current {
+            background-color: #ff9632 !important;
+            outline: 2px solid #ff6600;
+        }
+        .search-highlight {
+            background-color: #ffff00;
         }
     </style>
 </head>
 <body>
     <div id="fullscreenOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999;">
         <div style="display: flex; justify-content: center; align-items: center; height: 100%; color: white; font-size: 24px; font-weight: bold;">
-            Loading...
+            <div id="loadingText">Loading...</div>
         </div>
     </div>
-    <br>
+
     <div id="menu" class="menu" style="background-color: #dadce0; border-radius: 8px; border: 1pt solid black; padding: 5pt 5pt;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.addHighlightKeyWord()">Add Highlight</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.addHighlightKeyWord()">Add Highlight</div>
         <hr style="margin: 3pt; border: none;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeHighlightKeyWord()">Remove Highlight</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.removeHighlightKeyWord()">Remove Highlight</div>
         <hr style="margin: 3pt; border: none;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeAllHighlightKeyWord()">Remove All Highlight</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.removeAllHighlightKeyWord()">Remove All Highlight</div>
         <hr style="border: 0.5pt solid black; margin-left: 3pt; margin-right: 3pt; margin-top: 6pt; margin-bottom: 6pt;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.addMark()">Add Line Mark</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.addMark()">Add Line Mark</div>
         <hr style="margin: 3pt; border: none;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.editMark()">Edit Line Mark</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.editMark()">Edit Line Mark</div>
         <hr style="margin: 3pt; border: none;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.removeMark()">Remove Line Mark</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.removeMark()">Remove Line Mark</div>
         <hr style="border: 0.5pt solid black; margin-left: 3pt; margin-right: 3pt; margin-top: 6pt; margin-bottom: 6pt;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.hiddenBefore()">Hidden Before Lines</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.hideRange()">Hide Line Range</div>
         <hr style="margin: 3pt; border: none;">
-        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt;" onclick="window.hiddenAfter()">Hidden After Lines</div>
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.hideBeforeHere()">Hide Before This Line</div>
+        <hr style="margin: 3pt; border: none;">
+        <div class="menu__item" style="font-size: 18px; margin-left: 3pt; margin-right: 3pt; cursor:pointer;" onclick="window.hideAfterHere()">Hide After This Line</div>
     </div>
-    <div id="bar" style="position: fixed; top: 0; left: 0; width: 100%; background-color: white; z-index: 1000; padding: 10px; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); display: flex; gap: 10px; align-items: center;">
+
+    <div id="panelOverlay" class="panel-overlay" onclick="window.closeHiddenRangesPanel()"></div>
+    <div id="hiddenRangesPanel" class="hidden-ranges-panel">
+        <h3>Manage Hidden Ranges</h3>
+        <div id="hiddenRangesList"></div>
+        <div style="display: flex; align-items: center; margin-top: 15px;">
+            <button class="btn-add-range" onclick="window.addHiddenRangeManual()">+ Add Range</button>
+            <button class="btn-clear-all" onclick="window.clearAllHiddenRanges()">Clear All</button>
+            <button class="btn-close-panel" onclick="window.closeHiddenRangesPanel()">Close</button>
+        </div>
+    </div>
+
+    <!-- 搜索栏 -->
+    <div id="searchBar">
+        <input type="text" id="searchInput" placeholder="Search... (Enter to next, Shift+Enter to prev)">
+        <span class="search-info" id="searchInfo">0/0</span>
+        <button onclick="window.searchPrev()" title="Previous (Shift+Enter)">&#9650;</button>
+        <button onclick="window.searchNext()" title="Next (Enter)">&#9660;</button>
+        <label style="font-size:13px; display:flex; align-items:center; gap:3px;">
+            <input type="checkbox" style="width: 13px; height: 13px;" id="searchCaseSensitive"> Aa
+        </label>
+        <button class="search-close" onclick="window.closeSearch()" title="Close (Esc)">&times;</button>
+    </div>
+
+    <div id="bar">
         <button id="openButton">Select File</button>
         <button id="importButton">Import From Clipboard</button>
         <input type="file" id="fileInput" style="display: none;">
-        <div style="width: 20pt;"></div>
-        <div id="visibleRange" style="display: flex; align-items: center; gap: 5px;">
-            <span>Visible Line Range:</span>
-            <div style="display: flex; align-items: center; gap: 5px; border: 1px solid black; padding: 5px; border-radius: 5px;">
-                <span>from</span>
-                <div id="visibleStart" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="window.setVisibleStart()">-</div>
-                <span>to</span>
-                <div id="visibleEnd" style="text-align: center; min-width: 20px; cursor: pointer;" onclick="window.setVisibleEnd()">-</div>
-            </div>
+        <div style="width: 10pt;"></div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Hidden:</span>
+            <button id="manageHiddenBtn" onclick="window.openHiddenRangesPanel()" style="cursor:pointer;">
+                Manage <span id="hiddenCountBadge" class="hidden-count-badge" style="display:none;">0</span>
+            </button>
         </div>
-        <div style="width: 20pt;"></div>
+        <div style="width: 10pt;"></div>
         <div id="filters" style="display: flex; align-items: center;">
             Filters:
             <div id="filterDropdown" style="position: relative; display: inline-block; margin-left: 10px;">
-            <div id="filterText" style="cursor: pointer; width: 500px; border: 1pt solid black; height: 20px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="window.showInputBox()"></div>
-            <div id="inputBox" style="display: none; position: absolute; top: 40px; left: 0; width: 500px; height: 100px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
-                <textarea id="filterInput" placeholder="Enter filter keywords here, each keyword perline, regex supported" style="width: 100%; height: 100%;"></textarea>
-                <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
-                    <button onclick="window.cancelFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
-                <button onclick="window.applyFilters()" style="font-size: 16px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                <div id="filterText" style="cursor: pointer; width: 400px; border: 1pt solid black; height: 24px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;" onclick="window.showInputBox()"></div>
+                <div id="inputBox" style="display: none; position: absolute; top: 35px; left: 0; width: 500px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
+                    <textarea id="filterInput" placeholder="Enter keywords, one per line, OR logic between lines, regex supported" style="width: 100%; height: 100px;"></textarea>
+                    <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
+                        <button onclick="window.cancelFilters()" style="font-size: 14px; padding: 8px 16px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+                        <button onclick="window.applyFilters()" style="font-size: 14px; padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+                    </div>
                 </div>
-            </div>
             </div>
         </div>
         <div style="margin-left: auto; display: flex; gap: 10px;">
             <button id="copyButton" onclick="window.copyContent()">Copy Content</button>
-            <button id="exportButton" onclick="window.export()">Export</button>
+            <button id="exportButton" onclick="window.doExport()">Export</button>
         </div>
         <div style="width: 10pt;"></div>
     </div>
-    </br>
-    <div id="realContent">
-        <div style="display: flex;">
-            <div id="lineNumbers" style="width: 30px; border-right: 1px solid #ccc; text-align: center; padding-right: 10px; color: gray; position: sticky; left: 0; overflow: hidden;"></div>
-            <div id="fileContent" style="flex: 1; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"></div>
-            <div id="markContents" style="width: 200px; background-color: #f4f4f4; border-left: 1px solid #ccc; overflow-y: auto; white-space: nowrap; overflow-x: auto; color: gray;"></div>
+
+    <div id="virtualContainer">
+        <div id="virtualSpacer">
+            <div id="visibleRows"></div>
         </div>
     </div>
 
+    <!-- 离屏测量容器 -->
+    <div id="measureContainer" style="position:absolute; top:-9999px; left:0; visibility:hidden; width:100%;"></div>
+
     <script>
+        // ============= AC自动机 =============
         class ACTreeNode {
             constructor() {
                 this.children = {};
@@ -108,15 +373,11 @@
             }
         }
         class ACAutomaton {
-            constructor() {
-                this.root = new ACTreeNode();
-            }
+            constructor() { this.root = new ACTreeNode(); }
             insert(pattern) {
                 let node = this.root;
                 for (let char of pattern.toLowerCase()) {
-                    if (!node.children[char]) {
-                        node.children[char] = new ACTreeNode();
-                    }
+                    if (!node.children[char]) node.children[char] = new ACTreeNode();
                     node = node.children[char];
                 }
                 node.patterns.push(pattern);
@@ -134,14 +395,8 @@
                     for (let char in current.children) {
                         let child = current.children[char];
                         let failure = current.failure;
-                        while (failure !== this.root && !failure.children[char]) {
-                            failure = failure.failure;
-                        }
-                        if (failure.children[char]) {
-                            child.failure = failure.children[char];
-                        } else {
-                            child.failure = this.root;
-                        }
+                        while (failure !== this.root && !failure.children[char]) failure = failure.failure;
+                        child.failure = failure.children[char] ? failure.children[char] : this.root;
                         queue.push(child);
                     }
                 }
@@ -151,21 +406,13 @@
                 let results = [];
                 for (let i = 0; i < text.length; i++) {
                     let char = text[i].toLowerCase();
-                    while (node !== this.root && !node.children[char]) {
-                        node = node.failure;
-                    }
-                    if (node.children[char]) {
-                        node = node.children[char];
-                    } else {
-                        node = this.root;
-                    }
-
+                    while (node !== this.root && !node.children[char]) node = node.failure;
+                    node = node.children[char] ? node.children[char] : this.root;
                     let temp = node;
                     while (temp !== this.root) {
                         if (temp.patterns.length > 0) {
-                            for (let pattern of temp.patterns) {
+                            for (let pattern of temp.patterns)
                                 results.push({ pattern, index: i - pattern.length + 1 });
-                            }
                         }
                         temp = temp.failure;
                     }
@@ -173,167 +420,406 @@
                 return results;
             }
         }
-        document.addEventListener('contextmenu', (event) => {
-            const selection = window.getSelection();
-            const selectedDiv = selection.anchorNode.parentNode;
-            window.curSelectionLine = selectedDiv.getAttribute('line_num');
-            if (!window.curSelectionLine) {
-                let parentDiv = selectedDiv.parentNode;
-                while (parentDiv && !parentDiv.getAttribute('line_num')) {
-                    parentDiv = parentDiv.parentNode;
-                }
-                if (parentDiv) {
-                    window.curSelectionLine = parentDiv.getAttribute('line_num');
-                }
-            }
-            window.curSelectionText = selection.toString();
-            if (selection.rangeCount <= 0) {
-                return
-            }
-            if (!window.curSelectionText) {
-                return;
-            }
-            event.preventDefault();
-            const menu=document.getElementById('menu');
-            menu.style.top = event.pageY + 'px';
-            menu.style.left = event.pageX + 'px';
-            menu.classList.add('active');
-        });
-        window.addEventListener('click', function() {
-            menu.classList.remove('active');
-        })
-        const openButton = document.getElementById('openButton');
-        const importButton = document.getElementById('importButton');
-        const fileInput = document.getElementById('fileInput');
-        const fileContent = document.getElementById('fileContent');
-        window.colorList = [
-            'red', 'green', 'orange', 'cyan', 'magenta', 'lime', '#b3d9ff', '#b3b3ff', '#ffb3ff'
-        ]
+
+        // ============= 全局状态 =============
+        const DEFAULT_ROW_HEIGHT = 24;
+        window.colorList = ['red','green','orange','cyan','magenta','lime','#b3d9ff','#b3b3ff','#ffb3ff'];
         window.originContent = "";
         window.highlightIndex = 0;
         window.highlightKeywords = {};
         window.curSelectionText = null;
+        window.curSelectionLine = null;
         window.filterRules = [];
         window.filterRuleTexts = [];
-        window.lineNumbers = document.getElementById('lineNumbers');
         window.markLines = {};
-        window.visibleLinesStart = -1;
-        window.visibleLinesEnd = -1;
         window.curFilePath = null;
         window.highlightMatcher = null;
         window.plainContents = [];
+        window.hiddenRanges = [];
+        window.displayLines = [];
+        window.renderScheduled = false;
 
+        // 预计算行高缓存（按原始行号索引）
+        window.lineHeightCache = [];  // lineIndex -> 预计算的行高
+        window.lineHeightReady = false; // 行高是否已预计算完成
+        window.rowTopCache = [];     // displayIndex -> 累计top偏移
+        window.totalHeight = 0;      // 精确总高度
+        window.cachedLines = null;   // 缓存 split('\n') 的结果
+        window._decorateVersion = 0; // 用于取消过期的分片任务
+        window._measureVersion = 0;  // 用于取消过期的预计算任务
+
+        // 搜索相关状态
+        window.searchMatches = [];  // [{displayIndex, lineNum}]
+        window.searchCurrentIdx = -1;
+        window.searchKeyword = '';
+
+        // ============= 工具函数 =============
+        window.htmlEncode = function(text) {
+            return text.replace(/&/g, '&amp;')
+                       .replace(/</g, '&lt;')
+                       .replace(/>/g, '&gt;')
+                       .replace(/"/g, '&quot;')
+                       .replace(/'/g, '&#39;');
+        };
         window.showLoading = function () {
-            const overlay = document.getElementById('fullscreenOverlay');
-            overlay.style.display = 'block';
-        }
-
+            document.getElementById('fullscreenOverlay').style.display = 'block';
+            var lt = document.getElementById('loadingText');
+            if (lt) lt.textContent = 'Loading...';
+        };
         window.hideLoading = function () {
-            const overlay = document.getElementById('fullscreenOverlay');
-            overlay.style.display = 'none';
-        }
+            document.getElementById('fullscreenOverlay').style.display = 'none';
+        };
 
-        // 点击按钮时触发文件选择
-        openButton.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        // 处理文件选择
-        fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                window.curFilePath = file.name;
-                document.title = file.name;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    window.onFileChanged(e.target.result);
-                };
-                reader.readAsText(file);
+        // ============= 行高管理 =============
+        // 获取某个 displayIndex 对应的行高
+        window.getRowHeight = function(displayIdx) {
+            const item = window.displayLines[displayIdx];
+            if (!item) return DEFAULT_ROW_HEIGHT;
+            if (item.type === 'collapsed') return DEFAULT_ROW_HEIGHT; // collapsed行固定24px
+            // 从预计算缓存中按原始行号查表
+            const lineNum = item.lineNum;
+            if (window.lineHeightReady && lineNum >= 0 && lineNum < window.lineHeightCache.length) {
+                return window.lineHeightCache[lineNum];
             }
-        });
+            return DEFAULT_ROW_HEIGHT;
+        };
 
-        document.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'copy';
-        });
+        window.getRowTop = function(idx) {
+            if (idx < window.rowTopCache.length) return window.rowTopCache[idx];
+            // 按需扩展缓存到目标索引
+            window.ensureRowTopCache(idx);
+            if (idx < window.rowTopCache.length) return window.rowTopCache[idx];
+            return 0;
+        };
 
-        document.addEventListener('drop', (event) => {
-            event.preventDefault();
-            const file = event.dataTransfer.files[0];
-            if (file) {
-                window.curFilePath = file.name;
-                document.title = file.name;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    window.onFileChanged(e.target.result);
-                };
-                reader.readAsText(file);
+        // 构建 rowTopCache：基于预计算的行高精确计算
+        window.rebuildRowTopCache = function() {
+            window.rowTopCache = [];
+            const total = window.displayLines.length;
+            if (total === 0) {
+                window.totalHeight = 0;
+                return;
             }
-        });
+            // 一次性构建完整的 rowTopCache
+            let top = 0;
+            for (let i = 0; i < total; i++) {
+                window.rowTopCache[i] = top;
+                top += window.getRowHeight(i);
+            }
+            window.totalHeight = top;
+        };
 
-        importButton.addEventListener('click', () => {
-            navigator.clipboard.readText().then((text) => {
-                if (text) {
-                    const truncatedText = text.substring(0, 50);
-                    document.title = truncatedText;
-                    window.onFileChanged(text);
-                } else {
-                    alert("Clipboard is empty or could not read text.");
+        // 按需扩展 rowTopCache 到指定索引（兼容惰性调用）
+        window.ensureRowTopCache = function(targetIdx) {
+            const currentLen = window.rowTopCache.length;
+            if (targetIdx < currentLen) return;
+            const total = window.displayLines.length;
+            const end = Math.min(targetIdx + 1, total);
+            let top = 0;
+            if (currentLen > 0) {
+                top = window.rowTopCache[currentLen - 1] + window.getRowHeight(currentLen - 1);
+            }
+            for (let i = currentLen; i < end; i++) {
+                window.rowTopCache[i] = top;
+                top += window.getRowHeight(i);
+            }
+            if (end === total) {
+                window.totalHeight = top;
+            }
+        };
+
+        // 预计算所有行的行高（异步分片，利用离屏测量容器）
+        window.premeasureAllLineHeights = function(version) {
+            return new Promise(function(resolve) {
+                const lines = window.cachedLines;
+                if (!lines || lines.length === 0) {
+                    window.lineHeightCache = [];
+                    window.lineHeightReady = true;
+                    resolve();
+                    return;
                 }
-            }).catch((err) => {
-                console.error("Failed to read clipboard contents: ", err);
-                alert("Failed to read clipboard contents.");
+                const totalLines = lines.length;
+                const measureDiv = document.getElementById('measureContainer');
+                // 确保measureContainer的宽度与virtualContainer一致
+                const virtualContainer = document.getElementById('virtualContainer');
+                const containerWidth = virtualContainer.clientWidth;
+                // 计算行号列宽和mark列宽来得到content区域可用宽度
+                const maxLineNum = totalLines;
+                const lineCntWidth = Math.max(30, Math.ceil(Math.log10(maxLineNum + 2)) * 10 + 10);
+                const markCellWidth = 200;
+                const contentWidth = containerWidth - lineCntWidth - markCellWidth - 20; // 减去padding和border
+
+                const heightArr = new Array(totalLines);
+                const CHUNK_SIZE = 500; // 每批测量的行数
+                let i = 0;
+
+                function measureChunk() {
+                    if (version !== window._measureVersion) {
+                        resolve(); // 已过期，放弃
+                        return;
+                    }
+                    const chunkEnd = Math.min(i + CHUNK_SIZE, totalLines);
+                    // 批量构建HTML进行离屏测量
+                    let html = '';
+                    for (let j = i; j < chunkEnd; j++) {
+                        html += '<div class="content-cell line-row" data-line="' + j + '" style="width:' + contentWidth + 'px;">' + window.htmlEncode(lines[j]) + '</div>';
+                    }
+                    measureDiv.innerHTML = html;
+                    // 读取每个元素的实际高度
+                    const children = measureDiv.children;
+                    for (let k = 0; k < children.length; k++) {
+                        const el = children[k];
+                        const lineIdx = parseInt(el.getAttribute('data-line'));
+                        const h = el.offsetHeight;
+                        heightArr[lineIdx] = h > 0 ? h : DEFAULT_ROW_HEIGHT;
+                    }
+                    i = chunkEnd;
+
+                    // 更新进度提示
+                    const progress = Math.min(100, Math.round(i / totalLines * 100));
+                    const loadingText = document.getElementById('loadingText');
+                    if (loadingText) loadingText.textContent = 'Measuring... ' + progress + '%';
+
+                    if (i < totalLines) {
+                        setTimeout(measureChunk, 0);
+                    } else {
+                        measureDiv.innerHTML = ''; // 清理
+                        window.lineHeightCache = heightArr;
+                        window.lineHeightReady = true;
+                        resolve();
+                    }
+                }
+                measureChunk();
             });
-        });
-
-        window.onFileChanged = function(content) {
-            document.getElementById('visibleStart').innerText = '-';
-            document.getElementById('visibleEnd').innerText = '-';
-            document.getElementById('filterText').innerText = '';
-            window.originContent = content;
-            window.highlightKeywords = {};
-            window.highlightIndex = 0;
-            window.filterRules = [];
-            window.markLines = {};
-            window.visibleLinesStart = -1;
-            window.visibleLinesEnd = -1;
-            window.highlightMatcher = null;
-            window.filterRuleTexts = [];
-            window.plainContents = [];
-            window.decorate(true);
         };
 
-        window.filterDecorate = function (lineText, lineNum) {
-            if (window.filterRules.length <= 0) {
-                return true;
+        // 二分查找：给定scrollTop找到第一个可见行索引
+        window.findStartIndex = function(scrollTop) {
+            // 确保 rowTopCache 已完整构建
+            const total = window.displayLines.length;
+            if (total === 0) return 0;
+            window.ensureRowTopCache(total - 1);
+            let lo = 0, hi = total - 1;
+            while (lo <= hi) {
+                let mid = (lo + hi) >> 1;
+                let top = window.rowTopCache[mid];
+                let h = window.getRowHeight(mid);
+                if (top + h <= scrollTop) lo = mid + 1;
+                else if (top > scrollTop) hi = mid - 1;
+                else return mid;
             }
-            var res = false;
-            for (var i = 0; i < window.filterRules.length; i++) {
-                var rule = window.filterRules[i];
-                if (rule.test(lineText)) {
-                    res = true;
-                    break;
+            return Math.max(0, lo);
+        };
+
+        // ============= 隐藏区间管理 =============
+        window.isLineHidden = function(lineNum) {
+            for (let r of window.hiddenRanges) {
+                if (lineNum >= r.start && lineNum <= r.end) return true;
+            }
+            return false;
+        };
+        window.addHiddenRange = function(start, end) {
+            if (start > end) { let t = start; start = end; end = t; }
+            window.hiddenRanges.push({start, end});
+            window.mergeHiddenRanges();
+window.decorate(false);
+            window.updateHiddenBadge();
+        };
+        window.removeHiddenRange = function(index) {
+            window.hiddenRanges.splice(index, 1);
+window.decorate(false);
+            window.updateHiddenBadge();
+        };
+        window.clearAllHiddenRanges = function() {
+            window.hiddenRanges = [];
+window.decorate(false);
+            window.updateHiddenBadge();
+            window.closeHiddenRangesPanel();
+        };
+        window.mergeHiddenRanges = function() {
+            if (window.hiddenRanges.length <= 1) return;
+            window.hiddenRanges.sort((a, b) => a.start - b.start);
+            let merged = [window.hiddenRanges[0]];
+            for (let i = 1; i < window.hiddenRanges.length; i++) {
+                let last = merged[merged.length - 1];
+                let cur = window.hiddenRanges[i];
+                if (cur.start <= last.end + 1) {
+                    last.end = Math.max(last.end, cur.end);
+                } else {
+                    merged.push(cur);
                 }
             }
-            return res;
+            window.hiddenRanges = merged;
         };
-        window.highlightDecorate = function (lineText, lineNum) {
-            if (!window.highlightMatcher) {
-                return lineText;
+        window.updateHiddenBadge = function() {
+            const badge = document.getElementById('hiddenCountBadge');
+            const cnt = window.hiddenRanges.length;
+            badge.style.display = cnt > 0 ? 'inline' : 'none';
+            badge.textContent = cnt;
+        };
+        window.openHiddenRangesPanel = function() {
+            const panel = document.getElementById('hiddenRangesPanel');
+            const overlay = document.getElementById('panelOverlay');
+            const list = document.getElementById('hiddenRangesList');
+            list.innerHTML = '';
+            if (window.hiddenRanges.length === 0) {
+                list.innerHTML = '<div style="color:#999; padding: 10px;">No hidden ranges.</div>';
+            } else {
+                window.hiddenRanges.forEach((r, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'hidden-range-item';
+                    div.innerHTML = '<span>Line ' + (r.start + 1) + ' ~ Line ' + (r.end + 1) + ' (' + (r.end - r.start + 1) + ' lines)</span><button onclick="window.removeHiddenRange(' + i + '); window.openHiddenRangesPanel();">Remove</button>';
+                    list.appendChild(div);
+                });
             }
-            var res = lineText;
+            panel.style.display = 'block';
+            overlay.style.display = 'block';
+        };
+        window.closeHiddenRangesPanel = function() {
+            document.getElementById('hiddenRangesPanel').style.display = 'none';
+            document.getElementById('panelOverlay').style.display = 'none';
+        };
+        window.addHiddenRangeAction = function(start, end, hidePanel) {
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+            // 创建弹窗容器
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'background:#fff;border-radius:8px;padding:0;min-width:320px;box-shadow:0 4px 20px rgba(0,0,0,0.3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden;';
+
+            // 标题栏
+            const title = document.createElement('div');
+            title.textContent = 'Hide range (start - end)';
+            title.style.cssText = 'padding:14px 18px;font-size:15px;font-weight:600;color:#333;border-bottom:1px solid #eee;';
+
+            // 内容区域
+            const body = document.createElement('div');
+            body.style.cssText = 'padding:18px;';
+
+            // Start 输入框
+            const startLabel = document.createElement('label');
+            startLabel.textContent = 'Start line:';
+            startLabel.style.cssText = 'display:block;font-size:13px;color:#555;margin-bottom:4px;';
+            const startInput = document.createElement('input');
+            startInput.value = start;
+            startInput.type = 'number';
+            startInput.min = '1';
+            startInput.placeholder = 'start';
+            startInput.style.cssText = 'width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box;outline:none;';
+            startInput.onfocus = function() { this.style.borderColor = '#4a90d9'; };
+            startInput.onblur = function() { this.style.borderColor = '#ccc'; };
+
+            // End 输入框
+            const endLabel = document.createElement('label');
+            endLabel.textContent = 'End line:';
+            endLabel.style.cssText = 'display:block;font-size:13px;color:#555;margin-bottom:4px;margin-top:12px;';
+            const endInput = document.createElement('input');
+            endInput.value = end;
+            endInput.type = 'number';
+            endInput.min = '1';
+            endInput.placeholder = 'end';
+            endInput.style.cssText = 'width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box;outline:none;';
+            endInput.onfocus = function() { this.style.borderColor = '#4a90d9'; };
+            endInput.onblur = function() { this.style.borderColor = '#ccc'; };
+
+            // 按钮区域
+            const footer = document.createElement('div');
+            footer.style.cssText = 'padding:12px 18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #eee;';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.cssText = 'padding:7px 18px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#333;font-size:13px;cursor:pointer;';
+            cancelBtn.onmouseover = function() { this.style.background = '#f5f5f5'; };
+            cancelBtn.onmouseout = function() { this.style.background = '#fff'; };
+
+            const okBtn = document.createElement('button');
+            okBtn.textContent = 'OK';
+            okBtn.style.cssText = 'padding:7px 18px;border:none;border-radius:4px;background:#4a90d9;color:#fff;font-size:13px;cursor:pointer;';
+            okBtn.onmouseover = function() { this.style.background = '#3a7bc8'; };
+            okBtn.onmouseout = function() { this.style.background = '#4a90d9'; };
+
+            // 关闭弹窗
+            function closeDialog() { overlay.remove(); }
+
+            // 确认操作
+            function confirm() {
+                const s = parseInt(startInput.value) - 1;
+                const e = parseInt(endInput.value) - 1;
+                if (isNaN(s) || isNaN(e) || s < 0 || e < 0) {
+                    alert('Invalid line numbers.');
+                    return;
+                }
+                closeDialog();
+                window.addHiddenRange(s, e);
+                if (hidePanel) {
+                    window.openHiddenRangesPanel();
+                }
+            }
+
+            cancelBtn.onclick = closeDialog;
+            okBtn.onclick = confirm;
+            overlay.onclick = function(ev) { if (ev.target === overlay) closeDialog(); };
+
+            // 回车确认
+            startInput.onkeydown = endInput.onkeydown = function(ev) {
+                if (ev.key === 'Enter') confirm();
+                if (ev.key === 'Escape') closeDialog();
+            };
+
+            // 组装DOM
+            body.append(startLabel, startInput, endLabel, endInput);
+            footer.append(cancelBtn, okBtn);
+            dialog.append(title, body, footer);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            // 自动聚焦到 start 输入框
+            startInput.focus();
+        };
+        window.addHiddenRangeManual = function() {
+            window.addHiddenRangeAction(null, null, true);
+        };
+        window.hideRange = function() {
+            if (!window.curSelectionLine) return;
+            const curLine = Number(window.curSelectionLine);
+            window.addHiddenRangeAction(curLine, curLine.toString(), false);
+        };
+        window.hideBeforeHere = function() {
+            if (!window.curSelectionLine) return;
+            const curLine = Number(window.curSelectionLine);
+            if (curLine <= 0) return;
+            window.addHiddenRange(0, curLine - 1);
+        };
+        window.hideAfterHere = function() {
+            if (!window.curSelectionLine) return;
+            const curLine = Number(window.curSelectionLine);
+            const totalLines = window.cachedLines ? window.cachedLines.length : window.originContent.split('\n').length;
+            if (curLine >= totalLines - 1) return;
+            window.addHiddenRange(curLine + 1, totalLines - 1);
+        };
+
+        // ============= 过滤 =============
+        window.filterDecorate = function (lineText) {
+            if (window.filterRules.length <= 0) return true;
+            for (let i = 0; i < window.filterRules.length; i++) {
+                if (window.filterRules[i].test(lineText)) return true;
+            }
+            return false;
+        };
+
+        // ============= 高亮 =============
+        window.highlightDecorate = function (lineText) {
+            if (!window.highlightMatcher) return lineText;
             const matches = window.highlightMatcher.search(lineText);
-            if (matches.length <= 0) {
-                return res;
-            }
+            if (matches.length <= 0) return lineText;
+            let res = lineText;
             let offset = 0;
             for (const match of matches) {
                 const keyword = match.pattern;
                 const color = window.highlightKeywords[keyword];
-                if (!color) {
-                    continue;
-                }
-                const colorHead = `<span style="background-color: ${color};">`;
+                if (!color) continue;
+                const colorHead = '<span style="background-color: ' + color + ';">';
                 const colorTail = '</span>';
                 res = res.substring(0, match.index + offset) + colorHead + res.substring(match.index + offset, match.index + offset + match.pattern.length) + colorTail + res.substring(match.index + offset + match.pattern.length);
                 offset += colorHead.length + colorTail.length;
@@ -341,98 +827,639 @@
             return res;
         };
 
-        window.decorate = function (needResize = false) {
-            window.showLoading();
-
-            setTimeout(() => {
-                const visibleStartInput = document.getElementById('visibleStart');
-                const visibleEndInput = document.getElementById('visibleEnd');
-                visibleStartInput.innerText = window.visibleLinesStart > 0 ? (Number(window.visibleLinesStart) + 1) : 'start';
-                visibleEndInput.innerText = window.visibleLinesEnd > 0 ? (Number(window.visibleLinesEnd) + 1) : 'end';
-
-                var content = window.originContent;
-                var lines = content.split('\n');
-                var res = "";
+        // ============= 构建显示行数据（异步分片） =============
+        // 同步版本：用于小数据量场景的快速路径
+        window.rebuildDisplayLinesSync = function() {
+            const content = window.originContent;
+            if (!content) {
+                window.displayLines = [];
                 window.plainContents = [];
-                for (var i = 0; i < lines.length; i++) {
-                    if (window.visibleLinesStart > 0 && i < window.visibleLinesStart) {
-                        continue;
-                    }
-                    if (window.visibleLinesEnd > 0 && i > window.visibleLinesEnd) {
-                        continue;
-                    }
-                    var line = lines[i];
-                    if (!window.filterDecorate(line, i)) {
-                        continue;
-                    }
-                    window.plainContents.push(line);
-                    line = window.htmlEncode(line);
-                    line = window.highlightDecorate(line, i);
-                    var isMarked = false;
-                    if (window.markLines.hasOwnProperty(i)) {
-                        isMarked = true;
-                    }
-                    var bgStyle = "";
-                    if (isMarked) {
-                        bgStyle = "background-color: yellow;";
-                    }
-                    res = res + `<div line_num='${i}' style='${bgStyle}'>${line}</div>`;
-                }
-                fileContent.innerHTML = res;
-                window.updateSlideBars(lines.length);
-
-                if (needResize) {
-                    window.scrollTo(0, 0);
-                    fileContent.scrollTop = 0;
-                    fileContent.scrollLeft = 0;
-                }
-
-                setTimeout(() => {
-                    window.hideLoading();
-                }, 200);
-            }, 200);
-        };
-
-        window.updateSlideBars = function(lineCnt) {
-            const fileContent = document.getElementById('fileContent');
-            const lineNumbers = document.getElementById('lineNumbers');
-            const markContents = document.getElementById('markContents');
-
-            const fileContentDivs = fileContent.children;
-            var lineCnt = fileContentDivs.length
-            const lineCntWidth = Math.ceil(Math.log10(lineCnt + 1)) * 10 + 10;
-            lineNumbers.style.width = `${lineCntWidth}px`;
-            let lineNumbersHTML = '';
-            let markContentsHTML = '';
-            for (let i = 0; i < lineCnt; i++) {
-                const lineDiv = fileContentDivs[i];
-                const line_num = lineDiv.getAttribute('line_num');
-                let isMarked = false;
-                let markContent = "";
-                if (window.markLines.hasOwnProperty(line_num)) {
-                    isMarked = true;
-                }
-                const lineHeight = lineDiv.offsetHeight;
-                var bgStyle = "";
-                if (isMarked) {
-                    bgStyle = "background-color: yellow;";
-                    markContent = window.markLines[line_num] || '';
-                }
-                lineNumbersHTML += `<div style="height: ${lineHeight}px; ${bgStyle}">${(Number(line_num) + 1)}</div>`;
-                markContentsHTML += `<div style="height: ${lineHeight}px; ${bgStyle}">${markContent}</div>`;
-            }
-            lineNumbers.innerHTML = lineNumbersHTML;
-            markContents.innerHTML = markContentsHTML;
-        };
-
-        window.addHighlightKeyWord = function () {
-            var keyword = window.htmlEncode(window.curSelectionText.trim().toLowerCase());
-            if (keyword.length <= 0 || window.highlightKeywords.hasOwnProperty(keyword)) {
                 return;
             }
+            if (!window.cachedLines) window.cachedLines = content.split('\n');
+            const lines = window.cachedLines;
+            const result = [];
+            window.plainContents = [];
+            let i = 0;
+            let sortedRanges = window.hiddenRanges.slice().sort((a, b) => a.start - b.start);
+            // 构建隐藏区间起始行的快速查找 Map
+            const rangeStartMap = new Map();
+            for (let ri = 0; ri < sortedRanges.length; ri++) {
+                rangeStartMap.set(sortedRanges[ri].start, { range: sortedRanges[ri], origIdx: window.hiddenRanges.indexOf(sortedRanges[ri]) });
+            }
+            while (i < lines.length) {
+                const rangeInfo = rangeStartMap.get(i);
+                if (rangeInfo) {
+                    result.push({
+                        type: 'collapsed',
+                        lineNum: -1,
+                        text: '... Hidden lines ' + (rangeInfo.range.start + 1) + ' ~ ' + (rangeInfo.range.end + 1) + ' (' + (rangeInfo.range.end - rangeInfo.range.start + 1) + ' lines) - Click to unhide ...',
+                        rangeIndex: rangeInfo.origIdx
+                    });
+                    i = rangeInfo.range.end + 1;
+                    continue;
+                }
+                if (window.isLineHidden(i)) { i++; continue; }
+                const line = lines[i];
+                if (window.filterDecorate(line)) {
+                    window.plainContents.push(line);
+                    result.push({ type: 'line', lineNum: i, text: line });
+                }
+                i++;
+            }
+            window.displayLines = result;
+        };
+
+        // 异步分片版本：用于大数据量场景，避免阻塞主线程
+        window.rebuildDisplayLinesAsync = function(version) {
+            return new Promise(function(resolve) {
+                const content = window.originContent;
+                if (!content) {
+                    window.displayLines = [];
+                    window.plainContents = [];
+                    resolve();
+                    return;
+                }
+                if (!window.cachedLines) window.cachedLines = content.split('\n');
+                const lines = window.cachedLines;
+                const totalLines = lines.length;
+                const result = [];
+                const plainArr = [];
+                const CHUNK_SIZE = 5000; // 每批处理行数
+                let i = 0;
+                let sortedRanges = window.hiddenRanges.slice().sort((a, b) => a.start - b.start);
+                // 构建隐藏区间起始行的快速查找 Map
+                const rangeStartMap = new Map();
+                for (let ri = 0; ri < sortedRanges.length; ri++) {
+                    rangeStartMap.set(sortedRanges[ri].start, { range: sortedRanges[ri], origIdx: window.hiddenRanges.indexOf(sortedRanges[ri]) });
+                }
+
+                function processChunk() {
+                    // 检查是否已过期（有更新的 decorate 调用）
+                    if (version !== window._decorateVersion) {
+                        resolve(); // 放弃当前任务
+                        return;
+                    }
+                    const chunkEnd = Math.min(i + CHUNK_SIZE, totalLines);
+                    while (i < chunkEnd) {
+                        const rangeInfo = rangeStartMap.get(i);
+                        if (rangeInfo) {
+                            result.push({
+                                type: 'collapsed',
+                                lineNum: -1,
+                                text: '... Hidden lines ' + (rangeInfo.range.start + 1) + ' ~ ' + (rangeInfo.range.end + 1) + ' (' + (rangeInfo.range.end - rangeInfo.range.start + 1) + ' lines) - Click to unhide ...',
+                                rangeIndex: rangeInfo.origIdx
+                            });
+                            i = rangeInfo.range.end + 1;
+                            continue;
+                        }
+                        if (window.isLineHidden(i)) { i++; continue; }
+                        const line = lines[i];
+                        if (window.filterDecorate(line)) {
+                            plainArr.push(line);
+                            result.push({ type: 'line', lineNum: i, text: line });
+                        }
+                        i++;
+                    }
+                    // 更新进度提示
+                    const progress = Math.min(100, Math.round(i / totalLines * 100));
+                    const loadingText = document.getElementById('loadingText');
+                    if (loadingText) loadingText.textContent = 'Processing... ' + progress + '%';
+
+                    if (i < totalLines) {
+                        // 还有更多行，交还主线程后继续
+                        setTimeout(processChunk, 0);
+                    } else {
+                        // 处理完毕
+                        window.displayLines = result;
+                        window.plainContents = plainArr;
+                        resolve();
+                    }
+                }
+                processChunk();
+            });
+        };
+
+        // 统一入口：根据数据量自动选择同步或异步
+        window.rebuildDisplayLines = function() {
+            // 同步版本，保持向后兼容（供小数据量直接调用）
+            window.rebuildDisplayLinesSync();
+        };
+
+        // ============= 虚拟滚动渲染（预计算行高） =============
+        window.scheduleRender = function() {
+            if (window.renderScheduled) return;
+            window.renderScheduled = true;
+            requestAnimationFrame(() => {
+                window.renderScheduled = false;
+                window.renderVisibleRows();
+            });
+        };
+
+        window.renderVisibleRows = function() {
+            const container = document.getElementById('virtualContainer');
+            const spacer = document.getElementById('virtualSpacer');
+            const rowsDiv = document.getElementById('visibleRows');
+            const totalItems = window.displayLines.length;
+            if (totalItems === 0) {
+                spacer.style.height = '0px';
+                rowsDiv.innerHTML = '';
+                return;
+            }
+
+            // 设置总高度
+            spacer.style.height = window.totalHeight + 'px';
+
+            const scrollTop = container.scrollTop;
+            const viewHeight = container.clientHeight;
+
+            // 找到起始行
+            const buffer = 10;
+            let startIdx = window.findStartIndex(scrollTop);
+            startIdx = Math.max(0, startIdx - buffer);
+
+            // 找到结束行
+            let endIdx = startIdx;
+            let accHeight = window.getRowTop(startIdx);
+            while (endIdx < totalItems && accHeight < scrollTop + viewHeight + buffer * DEFAULT_ROW_HEIGHT) {
+                accHeight += window.getRowHeight(endIdx);
+                endIdx++;
+            }
+            endIdx = Math.min(totalItems - 1, endIdx + buffer);
+
+            // 计算行号列宽
+            let maxLineNum = 0;
+            for (let i = startIdx; i <= endIdx; i++) {
+                if (window.displayLines[i] && window.displayLines[i].lineNum >= 0)
+                    maxLineNum = Math.max(maxLineNum, window.displayLines[i].lineNum);
+            }
+            const lineCntWidth = Math.max(30, Math.ceil(Math.log10(maxLineNum + 2)) * 10 + 10);
+
+            // 构建HTML
+            let html = '';
+            for (let i = startIdx; i <= endIdx; i++) {
+                const item = window.displayLines[i];
+                if (!item) continue;
+                const topPos = window.getRowTop(i);
+                const rowH = window.getRowHeight(i);
+                const heightStyle = 'min-height:' + rowH + 'px;';
+
+                if (item.type === 'collapsed') {
+                    html += '<div class="row-container" data-didx="' + i + '" style="top:' + topPos + 'px; ' + heightStyle + ' width:100%;">' +
+                        '<div class="collapsed-row" style="width:100%; height:24px; line-height:24px;" onclick="window.removeHiddenRange(' + item.rangeIndex + ')">' + window.htmlEncode(item.text) + '</div></div>';
+                } else {
+                    const lineNum = item.lineNum;
+                    const isMarked = window.markLines.hasOwnProperty(lineNum);
+                    const bgStyle = isMarked ? 'background-color: yellow;' : '';
+                    const markContent = isMarked ? window.htmlEncode(window.markLines[lineNum] || '') : '';
+                    let lineHtml = window.htmlEncode(item.text);
+                    lineHtml = window.highlightDecorate(lineHtml);
+                    // 搜索高亮
+                    lineHtml = window.applySearchHighlight(lineHtml, i);
+
+                    html += '<div class="row-container" data-didx="' + i + '" style="top:' + topPos + 'px; ' + heightStyle + ' width:100%;">' +
+                        '<div class="line-num-cell" style="width:' + lineCntWidth + 'px; ' + bgStyle + '">' + (lineNum + 1) + '</div>' +
+                        '<div class="content-cell line-row" line_num="' + lineNum + '" style="' + bgStyle + '">' + lineHtml + '</div>' +
+                        '<div class="mark-cell" style="' + bgStyle + '">' + markContent + '</div></div>';
+                }
+            }
+            rowsDiv.innerHTML = html;
+            rowsDiv.style.top = '0px';
+
+        };
+
+        // ============= 搜索功能 =============
+        window.applySearchHighlight = function(lineHtml, displayIdx) {
+            if (!window.searchKeyword || window.searchMatches.length === 0) return lineHtml;
+            // 检查此行是否包含搜索匹配
+            let isMatch = false;
+            let isCurrent = false;
+            for (let m = 0; m < window.searchMatches.length; m++) {
+                if (window.searchMatches[m].displayIndex === displayIdx) {
+                    isMatch = true;
+                    if (m === window.searchCurrentIdx) isCurrent = true;
+                    break;
+                }
+            }
+            if (!isMatch) return lineHtml;
+
+            // 在已经HTML编码+高亮后的文本上进行搜索高亮
+            // 为避免破坏已有HTML标签，使用安全的方式：在纯文本部分替换
+            const keyword = window.searchKeyword;
+            const caseSensitive = document.getElementById('searchCaseSensitive').checked;
+            const flags = caseSensitive ? 'g' : 'gi';
+            const escapedKw = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const encodedKw = window.htmlEncode(keyword);
+            const escapedEncodedKw = encodedKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            try {
+                const regex = new RegExp('(' + escapedEncodedKw + ')', flags);
+                const highlightClass = isCurrent ? 'search-highlight-current' : 'search-highlight';
+                // 只替换不在HTML标签内的部分
+                let result = '';
+                let inTag = false;
+                let buffer = '';
+                for (let c = 0; c < lineHtml.length; c++) {
+                    if (lineHtml[c] === '<') {
+                        // 先处理buffer
+                        result += buffer.replace(regex, '<span class="' + highlightClass + '">$1</span>');
+                        buffer = '';
+                        inTag = true;
+                        result += '<';
+                    } else if (lineHtml[c] === '>' && inTag) {
+                        inTag = false;
+                        result += '>';
+                    } else if (inTag) {
+                        result += lineHtml[c];
+                    } else {
+                        buffer += lineHtml[c];
+                    }
+                }
+                if (buffer) {
+                    result += buffer.replace(regex, '<span class="' + highlightClass + '">$1</span>');
+                }
+                return result;
+            } catch(e) {
+                return lineHtml;
+            }
+        };
+
+        window.openSearch = function() {
+            const searchBar = document.getElementById('searchBar');
+            searchBar.classList.add('show');
+            const input = document.getElementById('searchInput');
+            input.focus();
+            input.select();
+        };
+        window.closeSearch = function() {
+            const searchBar = document.getElementById('searchBar');
+            searchBar.classList.remove('show');
+            window.searchMatches = [];
+            window.searchCurrentIdx = -1;
+            window.searchKeyword = '';
+            document.getElementById('searchInfo').textContent = '0/0';
+            document.getElementById('searchInput').value = '';
+            window.scheduleRender();
+        };
+        window._searchVersion = 0; // 用于取消过期的搜索任务
+
+        window.doSearch = function() {
+            const input = document.getElementById('searchInput').value;
+            if (!input) {
+                window.searchMatches = [];
+                window.searchCurrentIdx = -1;
+                window.searchKeyword = '';
+                document.getElementById('searchInfo').textContent = '0/0';
+                window.scheduleRender();
+                return;
+            }
+            window.searchKeyword = input;
+            window._searchVersion++;
+            const searchVer = window._searchVersion;
+            const caseSensitive = document.getElementById('searchCaseSensitive').checked;
+            const totalItems = window.displayLines.length;
+
+            if (totalItems <= ASYNC_THRESHOLD) {
+                // 小数据量：同步搜索
+                const matches = [];
+                const searchKw = caseSensitive ? input : input.toLowerCase();
+                for (let i = 0; i < totalItems; i++) {
+                    const item = window.displayLines[i];
+                    if (item.type !== 'line') continue;
+                    const searchText = caseSensitive ? item.text : item.text.toLowerCase();
+                    if (searchText.indexOf(searchKw) !== -1) {
+                        matches.push({ displayIndex: i, lineNum: item.lineNum });
+                    }
+                }
+                window.searchMatches = matches;
+                if (matches.length > 0) {
+                    window.searchCurrentIdx = 0;
+                    document.getElementById('searchInfo').textContent = '1/' + matches.length;
+                    window.scrollToSearchMatch(0);
+                } else {
+                    window.searchCurrentIdx = -1;
+                    document.getElementById('searchInfo').textContent = '0/0';
+                    window.scheduleRender();
+                }
+            } else {
+                // 大数据量：异步分片搜索
+                document.getElementById('searchInfo').textContent = 'Searching...';
+                const matches = [];
+                const SEARCH_CHUNK = 5000;
+                let idx = 0;
+                const searchKw = caseSensitive ? input : input.toLowerCase();
+
+                function searchChunk() {
+                    if (searchVer !== window._searchVersion) return; // 已过期
+                    const chunkEnd = Math.min(idx + SEARCH_CHUNK, totalItems);
+                    while (idx < chunkEnd) {
+                        const item = window.displayLines[idx];
+                        if (item.type === 'line') {
+                            const searchText = caseSensitive ? item.text : item.text.toLowerCase();
+                            if (searchText.indexOf(searchKw) !== -1) {
+                                matches.push({ displayIndex: idx, lineNum: item.lineNum });
+                            }
+                        }
+                        idx++;
+                    }
+                    if (idx < totalItems) {
+                        setTimeout(searchChunk, 0);
+                    } else {
+                        if (searchVer !== window._searchVersion) return;
+                        window.searchMatches = matches;
+                        if (matches.length > 0) {
+                            window.searchCurrentIdx = 0;
+                            document.getElementById('searchInfo').textContent = '1/' + matches.length;
+                            window.scrollToSearchMatch(0);
+                        } else {
+                            window.searchCurrentIdx = -1;
+                            document.getElementById('searchInfo').textContent = '0/0';
+                            window.scheduleRender();
+                        }
+                    }
+                }
+                setTimeout(searchChunk, 0);
+            }
+        };
+        window.searchNext = function() {
+            if (window.searchMatches.length === 0) return;
+            window.searchCurrentIdx = (window.searchCurrentIdx + 1) % window.searchMatches.length;
+            document.getElementById('searchInfo').textContent = (window.searchCurrentIdx + 1) + '/' + window.searchMatches.length;
+            window.scrollToSearchMatch(window.searchCurrentIdx);
+        };
+        window.searchPrev = function() {
+            if (window.searchMatches.length === 0) return;
+            window.searchCurrentIdx = (window.searchCurrentIdx - 1 + window.searchMatches.length) % window.searchMatches.length;
+            document.getElementById('searchInfo').textContent = (window.searchCurrentIdx + 1) + '/' + window.searchMatches.length;
+            window.scrollToSearchMatch(window.searchCurrentIdx);
+        };
+        window.scrollToSearchMatch = function(matchIdx) {
+            const match = window.searchMatches[matchIdx];
+            if (!match) return;
+            const container = document.getElementById('virtualContainer');
+            const targetTop = window.getRowTop(match.displayIndex);
+            const viewHeight = container.clientHeight;
+            // 滚动到使目标行大致居中
+            container.scrollTop = Math.max(0, targetTop - viewHeight / 3);
+            window.scheduleRender();
+        };
+
+        // 拦截Ctrl+F
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                window.openSearch();
+            }
+            if (e.key === 'Escape') {
+                const searchBar = document.getElementById('searchBar');
+                if (searchBar.classList.contains('show')) {
+                    window.closeSearch();
+                }
+            }
+        });
+        // 搜索输入事件
+        document.getElementById('searchInput').addEventListener('input', function() {
+            window.doSearch();
+        });
+        document.getElementById('searchInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) window.searchPrev();
+                else window.searchNext();
+            }
+        });
+        document.getElementById('searchCaseSensitive').addEventListener('change', function() {
+            window.doSearch();
+        });
+
+        // ============= 初始化虚拟滚动容器 =============
+        window.initVirtualScroll = function() {
+            const container = document.getElementById('virtualContainer');
+            const bar = document.getElementById('bar');
+            const barHeight = bar.offsetHeight;
+            container.style.top = barHeight + 'px';
+            container.style.height = (window.innerHeight - barHeight) + 'px';
+            container.style.width = '100%';
+            container.addEventListener('scroll', () => { window.scheduleRender(); });
+            // 初始化容器宽度记录
+            _lastContainerWidth = container.clientWidth;
+        };
+        let _resizeTimer = null;
+        let _lastContainerWidth = 0; // 记录上次容器宽度，仅在宽度真正变化时才重置行高
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('virtualContainer');
+            const bar = document.getElementById('bar');
+            const barHeight = bar.offsetHeight;
+            container.style.top = barHeight + 'px';
+            container.style.height = (window.innerHeight - barHeight) + 'px';
+            // 防抖：仅在容器宽度变化时才重置行高缓存（避免prompt弹窗等触发的虚假resize）
+            const currentWidth = container.clientWidth;
+            if (_resizeTimer) clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(function() {
+                if (currentWidth !== _lastContainerWidth) {
+                    // 宽度变化会影响文本换行，需要重新预计算行高
+                    _lastContainerWidth = currentWidth;
+                    if (window.cachedLines && window.cachedLines.length > 0) {
+                        window.lineHeightReady = false;
+                        window._measureVersion++;
+                        var mVer = window._measureVersion;
+                        window.showLoading();
+                        window.premeasureAllLineHeights(mVer).then(function() {
+                            if (mVer !== window._measureVersion) return;
+                            window.rebuildRowTopCache();
+                            window.scheduleRender();
+                            window.hideLoading();
+                        });
+                        return;
+                    }
+                }
+                window.scheduleRender();
+            }, 150);
+        });
+
+        // ============= 文件加载 =============
+        // 大文件阈值：超过此行数使用异步分片
+        const ASYNC_THRESHOLD = 10000;
+
+        window.onFileChanged = function(content) {
+            document.getElementById('filterText').innerText = '';
+            window.originContent = content;
+            window.cachedLines = null;
+            window.highlightKeywords = {};
+            window.highlightIndex = 0;
+            window.filterRules = [];
+            window.filterRuleTexts = [];
+            window.markLines = {};
+            window.hiddenRanges = [];
+            window.highlightMatcher = null;
+            window.plainContents = [];
+            window.displayLines = [];
+            window.searchMatches = [];
+            window.searchCurrentIdx = -1;
+            window.searchKeyword = '';
+            window.lineHeightCache = [];
+            window.lineHeightReady = false;
+            window.rowTopCache = [];
+            window.totalHeight = 0;
+            window.updateHiddenBadge();
+            window.showLoading();
+            window._decorateVersion++;
+            window._measureVersion++;
+            const version = window._decorateVersion;
+            const measureVer = window._measureVersion;
+
+            // 先缓存 split 结果
+            window.cachedLines = content.split('\n');
+            const lineCount = window.cachedLines.length;
+
+            setTimeout(function() {
+                // 第一步：预计算所有行的行高
+                window.premeasureAllLineHeights(measureVer).then(function() {
+                    if (measureVer !== window._measureVersion) return;
+                    // 第二步：构建显示行数据
+                    if (lineCount > ASYNC_THRESHOLD) {
+                        return window.rebuildDisplayLinesAsync(version).then(function() {
+                            if (version !== window._decorateVersion) return;
+                            window.rebuildRowTopCache();
+                            window.scheduleRender();
+                            document.getElementById('virtualContainer').scrollTop = 0;
+                            setTimeout(function() { window.hideLoading(); }, 50);
+                        });
+                    } else {
+                        window.rebuildDisplayLinesSync();
+                        window.rebuildRowTopCache();
+                        window.scheduleRender();
+                        document.getElementById('virtualContainer').scrollTop = 0;
+                        setTimeout(function() { window.hideLoading(); }, 50);
+                    }
+                });
+            }, 50);
+        };
+
+        // needResize: 是否滚动到顶部
+        // 行高已在文件加载时预计算，操作时无需重新测量，直接查表即可
+        window.decorate = function(needResize) {
+            window.showLoading();
+            window._decorateVersion++;
+            const version = window._decorateVersion;
+            const lineCount = window.cachedLines ? window.cachedLines.length : 0;
+
+            setTimeout(function() {
+                // 清空位置缓存，重建时会根据 lineHeightCache 查表
+                window.rowTopCache = [];
+                if (lineCount > ASYNC_THRESHOLD) {
+                    // 大文件：异步分片处理
+                    window.rebuildDisplayLinesAsync(version).then(function() {
+                        if (version !== window._decorateVersion) return;
+                        window.rebuildRowTopCache();
+                        // 钳制scrollTop，防止隐藏行后总高度缩小导致scrollTop越界白屏
+                        var container = document.getElementById('virtualContainer');
+                        var maxScroll = Math.max(0, window.totalHeight - container.clientHeight);
+                        if (container.scrollTop > maxScroll) {
+                            container.scrollTop = maxScroll;
+                        }
+                        window.scheduleRender();
+                        if (needResize) container.scrollTop = 0;
+                        setTimeout(function() { window.hideLoading(); }, 50);
+                    });
+                } else {
+                    // 小文件：同步处理
+                    window.rebuildDisplayLinesSync();
+                    window.rebuildRowTopCache();
+                    // 钳制scrollTop，防止隐藏行后总高度缩小导致scrollTop越界白屏
+                    var container = document.getElementById('virtualContainer');
+                    var maxScroll = Math.max(0, window.totalHeight - container.clientHeight);
+                    if (container.scrollTop > maxScroll) {
+                        container.scrollTop = maxScroll;
+                    }
+                    window.scheduleRender();
+                    if (needResize) container.scrollTop = 0;
+                    setTimeout(function() { window.hideLoading(); }, 50);
+                }
+            }, 50);
+        };
+
+        // ============= 右键菜单 =============
+        document.addEventListener('contextmenu', (event) => {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount <= 0) return;
+            const selectedDiv = selection.anchorNode ? selection.anchorNode.parentNode : null;
+            if (!selectedDiv) return;
+            window.curSelectionLine = null;
+            let node = selectedDiv;
+            while (node) {
+                const ln = node.getAttribute ? node.getAttribute('line_num') : null;
+                if (ln !== null && ln !== undefined) { window.curSelectionLine = ln; break; }
+                node = node.parentNode;
+                if (node === document.body) break;
+            }
+            window.curSelectionText = selection.toString();
+            if (!window.curSelectionText && !window.curSelectionLine) return;
+            event.preventDefault();
+            const menu = document.getElementById('menu');
+            // 先显示菜单以获取其尺寸（visibility:hidden 不影响布局测量）
+            menu.classList.add('active');
+            const menuWidth = menu.offsetWidth;
+            const menuHeight = menu.offsetHeight;
+            const viewportW = window.innerWidth;
+            const viewportH = window.innerHeight;
+            // 计算位置，确保菜单不超出视口
+            let posX = event.clientX;
+            let posY = event.clientY;
+            if (posX + menuWidth > viewportW) {
+                posX = Math.max(0, viewportW - menuWidth - 5);
+            }
+            if (posY + menuHeight > viewportH) {
+                posY = Math.max(0, viewportH - menuHeight - 5);
+            }
+            menu.style.left = posX + 'px';
+            menu.style.top = posY + 'px';
+        });
+        window.addEventListener('click', function() {
+            document.getElementById('menu').classList.remove('active');
+        });
+
+        // ============= 文件选择与拖拽 =============
+        const openButton = document.getElementById('openButton');
+        const importButton = document.getElementById('importButton');
+        const fileInput = document.getElementById('fileInput');
+        openButton.addEventListener('click', () => { fileInput.click(); });
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                window.curFilePath = file.name;
+                document.title = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => { window.onFileChanged(e.target.result); };
+                reader.readAsText(file);
+            }
+        });
+        document.addEventListener('dragover', (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; });
+        document.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+            if (file) {
+                window.curFilePath = file.name;
+                document.title = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => { window.onFileChanged(e.target.result); };
+                reader.readAsText(file);
+            }
+        });
+        importButton.addEventListener('click', () => {
+            navigator.clipboard.readText().then((text) => {
+                if (text) { document.title = text.substring(0, 50); window.onFileChanged(text); }
+                else { alert("Clipboard is empty or could not read text."); }
+            }).catch((err) => { console.error("Failed to read clipboard contents: ", err); alert("Failed to read clipboard contents."); });
+        });
+
+        // ============= 高亮关键词 =============
+        window.addHighlightKeyWord = function () {
+            var keyword = window.htmlEncode(window.curSelectionText.trim().toLowerCase());
+            if (keyword.length <= 0 || window.highlightKeywords.hasOwnProperty(keyword)) return;
             let allKeys = Object.keys(window.highlightKeywords);
             const color = window.colorList[window.highlightIndex % window.colorList.length];
-            window.highlightIndex = window.highlightIndex + 1;
+            window.highlightIndex++;
             for (let i = 0; i < allKeys.length; i++) {
                 const item = allKeys[i];
                 if (keyword.includes(item)) {
@@ -440,9 +1467,7 @@
                     window.retrainHighlightMatcher();
                     window.decorate();
                     return;
-                } else if (item.includes(keyword)) {
-                    return;
-                }
+                } else if (item.includes(keyword)) { return; }
             }
             window.highlightKeywords[keyword] = color;
             window.retrainHighlightMatcher();
@@ -450,9 +1475,7 @@
         };
         window.removeHighlightKeyWord = function () {
             var keyword = window.curSelectionText.trim().toLowerCase();
-            if (keyword.length <= 0 || !window.highlightKeywords.hasOwnProperty(keyword)) {
-                return;
-            }
+            if (keyword.length <= 0 || !window.highlightKeywords.hasOwnProperty(keyword)) return;
             delete window.highlightKeywords[keyword];
             window.retrainHighlightMatcher();
             window.decorate();
@@ -464,19 +1487,14 @@
             window.decorate();
         };
         window.retrainHighlightMatcher = function() {
-            if (window.highlightKeywords.length <= 0) {
-                window.highlightMatcher = null;
-                return;
-            }
-            window.highlightMatcher = new ACAutomaton();
             let allKeys = Object.keys(window.highlightKeywords);
-            for (let i = 0; i < allKeys.length; i++) {
-                const item = allKeys[i];
-                window.highlightMatcher.insert(item);
-            }
+            if (allKeys.length <= 0) { window.highlightMatcher = null; return; }
+            window.highlightMatcher = new ACAutomaton();
+            for (let i = 0; i < allKeys.length; i++) window.highlightMatcher.insert(allKeys[i]);
             window.highlightMatcher.train();
         };
-        
+
+        // ============= 过滤器 =============
         window.showInputBox = function() {
             const inputBox = document.getElementById('inputBox');
             if (inputBox.style.display === 'none') {
@@ -487,189 +1505,122 @@
                 inputBox.style.display = 'none';
                 document.removeEventListener('click', window.hideInputBoxOnClickOutside);
             }
-        }
+        };
         window.hideInputBox = function() {
-            const inputBox = document.getElementById('inputBox');
-            inputBox.style.display = 'none';
-            document.removeEventListener('click', hideInputBoxOnClickOutside);
-        }
+            document.getElementById('inputBox').style.display = 'none';
+            document.removeEventListener('click', window.hideInputBoxOnClickOutside);
+        };
         window.hideInputBoxOnClickOutside = function(event) {
             const inputBox = document.getElementById('inputBox');
             const filterText = document.getElementById('filterText');
-            if (!inputBox.contains(event.target) && event.target !== filterText) {
-                window.hideInputBox();
-            }
-        }
+            if (!inputBox.contains(event.target) && event.target !== filterText) window.hideInputBox();
+        };
         window.applyFilters = function() {
             window.hideInputBox();
             const filterInput = document.getElementById('filterInput').value.trim();
             if (filterInput.length > 0) {
-                const keywords = filterInput.split('\n').map(keyword => keyword.trim()).filter(keyword => keyword.length > 0);
+                const keywords = filterInput.split('\n').map(k => k.trim()).filter(k => k.length > 0);
                 document.getElementById('filterText').innerText = keywords.join(' ');
                 window.filterRuleTexts = keywords;
-                window.filterRules = keywords.map(keyword => new RegExp(keyword, 'i'));
+                window.filterRules = keywords.map(k => new RegExp(k, 'i'));
             } else {
                 document.getElementById('filterText').innerText = "";
                 window.filterRuleTexts = [];
                 window.filterRules = [];
             }
-            window.decorate(true);
-        }
-        window.cancelFilters = function() {
-            window.hideInputBox();
-        }
+window.decorate(true);
+        };
+        window.cancelFilters = function() { window.hideInputBox(); };
 
+        // ============= 行标记 =============
         window.addMark = function() {
-            if (!window.curSelectionLine) {
-                return;
-            }
+            if (!window.curSelectionLine) return;
             const input = prompt("Enter mark content for this line:");
-            if (input === null || input.trim() === "") {
-                return;
-            }
+            if (input === null || input.trim() === "") return;
             window.markLines[window.curSelectionLine] = input.trim();
-            window.decorate();
+            window.scheduleRender();
         };
         window.editMark = function() {
-            if (!window.curSelectionLine) {
-                return;
-            }
-            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) {
-                return;
-            }
-            oldContent = window.markLines[window.curSelectionLine];
+            if (!window.curSelectionLine) return;
+            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) return;
+            const oldContent = window.markLines[window.curSelectionLine];
             const input = prompt("", oldContent);
-            if (input === null || input.trim() === "") {
-                return;
-            }
+            if (input === null || input.trim() === "") return;
             window.markLines[window.curSelectionLine] = input.trim();
-            window.decorate();
+            window.scheduleRender();
         };
         window.removeMark = function() {
-            if (!window.curSelectionLine) {
-                return;
-            }
-            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) {
-                return;
-            }
+            if (!window.curSelectionLine) return;
+            if (!window.markLines.hasOwnProperty(window.curSelectionLine)) return;
             delete window.markLines[window.curSelectionLine];
-            window.decorate();
+            window.scheduleRender();
         };
 
-        window.hiddenBefore = function() {
-            if (!window.curSelectionLine) {
-                return;
-            }
-            window.visibleLinesStart = Number(curSelectionLine);
-            window.decorate(true);
-        };
-        window.hiddenAfter = function() {
-            if (!window.curSelectionLine) {
-                return;
-            }
-            window.visibleLinesEnd = Number(window.curSelectionLine);
-            window.decorate(true);
-        };
-        window.setVisibleStart = function() {
-            var newLineNum = window.visibleLinesStart
-            const input = prompt("Enter the starting line number:", window.visibleLinesStart > 0 ? (Number(window.visibleLinesStart) + 1) : "");
-            if (input !== null && !isNaN(input) && Number(input) > 0) {
-                newLineNum = Number(input) - 1;
-            } else if (input === null || input === "") {
-                newLineNum = -1;
-            }
-            if (newLineNum !== window.visibleLinesStart) {
-                window.visibleLinesStart = newLineNum;
-                window.decorate(true);
-            }
-        };
-        window.setVisibleEnd = function() {
-            var newLineNum = window.visibleLinesEnd
-            const input = prompt("Enter the ending line number:", window.visibleLinesEnd > 0 ? (Number(window.visibleLinesEnd) + 1) : "");
-            if (input !== null && !isNaN(input) && Number(input) > 0) {
-                newLineNum = Number(input) - 1;
-            } else if (input === null || input === "") {
-                newLineNum = -1;
-            }
-            if (newLineNum !== window.visibleLinesEnd) {
-                window.visibleLinesEnd = newLineNum;
-                window.decorate(true);
-            }
-        };
-
+        // ============= 复制 =============
         window.copyContent = function() {
             navigator.clipboard.writeText(window.plainContents.join('\n')).then(() => {
                 alert("Content copied to clipboard!");
-            }).catch(err => {
-                console.error("Failed to copy content: ", err);
-            });
-        }
+            }).catch(err => { console.error("Failed to copy content: ", err); });
+        };
 
-        window.export = function() {
-            let exportFileName = window.curFilePath
+        // ============= 导出 =============
+        window.doExport = function() {
+            let exportFileName = window.curFilePath;
             if (exportFileName) {
                 const lastDotIndex = exportFileName.lastIndexOf('.');
-                if (lastDotIndex > 0) {
-                    exportFileName = exportFileName.substring(0, lastDotIndex);
-                }
-                exportFileName = `${exportFileName}_export.html`;
+                if (lastDotIndex > 0) exportFileName = exportFileName.substring(0, lastDotIndex);
+                exportFileName = exportFileName + '_export.html';
             } else {
-                exportFileName = `${Date.now().toString()}_export.html`;
+                exportFileName = Date.now().toString() + '_export.html';
             }
             var fileName = prompt("Enter the file name for export:", exportFileName);
-            if (!fileName) {
-                return;
+            if (!fileName) return;
+            let maxLN = 0;
+            for (let item of window.displayLines) {
+                if (item.lineNum >= 0) maxLN = Math.max(maxLN, item.lineNum);
             }
-            var newHtmlContent = document.getElementById('realContent').innerHTML;
-            
-            newHtmlContent = `<html>
-    <head>
-        <meta charset=\"UTF-8\">
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 20px;
+            const lnWidth = Math.max(30, Math.ceil(Math.log10(maxLN + 2)) * 10 + 10);
+            // 逐行flex布局，确保行号、内容、mark三列对齐
+            let rowsHtml = '';
+            for (let item of window.displayLines) {
+                if (item.type === 'collapsed') {
+                    rowsHtml += '<div class="row"><div class="ln-cell">&nbsp;</div>' +
+                        '<div class="ct-cell" style="background:#fff3cd; color:#856404; text-align:center; font-style:italic; border-top:1px dashed #ffc107; border-bottom:1px dashed #ffc107;">' + window.htmlEncode(item.text) + '</div>' +
+                        '<div class="mk-cell">&nbsp;</div></div>';
+                } else {
+                    const ln = item.lineNum;
+                    const isMarked = window.markLines.hasOwnProperty(ln);
+                    const bgStyle = isMarked ? 'background-color:yellow;' : '';
+                    const markText = isMarked ? window.htmlEncode(window.markLines[ln] || '') : '';
+                    let lineHtml = window.htmlEncode(item.text);
+                    lineHtml = window.highlightDecorate(lineHtml);
+                    rowsHtml += '<div class="row">' +
+                        '<div class="ln-cell" style="' + bgStyle + '">' + (ln + 1) + '</div>' +
+                        '<div class="ct-cell" style="' + bgStyle + '">' + lineHtml + '</div>' +
+                        '<div class="mk-cell" style="' + bgStyle + '">' + markText + '</div></div>';
+                }
             }
-            .menu{
-                position: absolute;
-                top:0px;
-                left: 0px;
-                background: #fff;
-                border: 1px solid #dadce0;
-                visibility: hidden;
-            }
-            .active{
-                visibility: visible;
-            }
-            #lineNumbers div, #fileContent div, #markContents div {
-                font-size: 16px;
-                line-height: 1.5;
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            #fileContent span {
-                line-height: inherit;
-            }
-        </style>
-    </head>
-    <body>` + newHtmlContent + "</body></html>";
-            const blob = new Blob([newHtmlContent], { type: 'text/html' });
+            const exportHtml = '<html><head><meta charset="UTF-8"><style>' +
+                'body{font-family:Arial,sans-serif;margin:20px;}' +
+                '.row{display:flex; width:100%;}' +
+                '.ln-cell{flex-shrink:0; width:' + lnWidth + 'px; text-align:center; padding-right:5px; color:gray; border-right:1px solid #ccc; font-size:16px; line-height:1.5; box-sizing:border-box;}' +
+                '.ct-cell{flex:1; padding-left:5px; white-space:pre-wrap; word-wrap:break-word; word-break:break-all; min-width:0; font-size:16px; line-height:1.5; box-sizing:border-box;}' +
+                '.ct-cell span{line-height:inherit;}' +
+                '.mk-cell{flex-shrink:0; width:200px; background-color:#f4f4f4; border-left:1px solid #ccc; color:gray; padding-left:5px; white-space:nowrap; overflow-x:auto; font-size:16px; line-height:1.5; box-sizing:border-box;}' +
+                '</style></head><body><div id="realContent">' + rowsHtml + '</div></body></html>';
+            const blob = new Blob([exportHtml], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
             a.click();
             URL.revokeObjectURL(url);
-        }
-
-        window.htmlEncode = function(text) {
-            return text.replace(/&/g, '&amp;')
-                       .replace(/</g, '&lt;')
-                       .replace(/>/g, '&gt;')
-                       .replace(/"/g, '&quot;')
-                       .replace(/'/g, '&#39;');
         };
+
+        // ============= 初始化 =============
+        window.addEventListener('load', () => {
+            window.initVirtualScroll();
+        });
     </script>
 </body>
 </html>
