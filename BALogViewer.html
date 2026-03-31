@@ -199,6 +199,84 @@
             margin-left: 4px;
             vertical-align: middle;
         }
+        .mark-count-badge {
+            background: #2196F3;
+            color: white;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 12px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        /* Line Marks 面板 */
+        .line-marks-panel {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 3000;
+            width: 550px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .line-marks-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        .line-mark-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .line-mark-item:hover { background: #e8f0fe; }
+        .line-mark-item .mark-line-num {
+            flex-shrink: 0;
+            font-weight: bold;
+            color: #1a73e8;
+            margin-right: 12px;
+            font-size: 14px;
+            min-width: 70px;
+        }
+        .line-mark-item .mark-text {
+            flex: 1;
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .line-mark-item .mark-delete-btn {
+            flex-shrink: 0;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+        }
+        .line-mark-item .mark-delete-btn:hover { background: #d32f2f; }
+        .line-marks-panel-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 2999;
+        }
         .collapsed-row {
             background: #fff3cd;
             color: #856404;
@@ -310,6 +388,16 @@
         </div>
     </div>
 
+    <!-- Line Marks 面板 -->
+    <div id="lineMarksPanelOverlay" class="line-marks-panel-overlay" onclick="window.closeLineMarksPanel()"></div>
+    <div id="lineMarksPanel" class="line-marks-panel">
+        <h3>Line Marks</h3>
+        <div id="lineMarksList"></div>
+        <div style="display: flex; align-items: center; margin-top: 15px;">
+            <button class="btn-close-panel" onclick="window.closeLineMarksPanel()">Close</button>
+        </div>
+    </div>
+
     <!-- 搜索栏 -->
     <div id="searchBar">
         <input type="text" id="searchInput" placeholder="Search... (Enter to next, Shift+Enter to prev)">
@@ -331,6 +419,13 @@
             <span>Hidden:</span>
             <button id="manageHiddenBtn" onclick="window.openHiddenRangesPanel()" style="cursor:pointer;">
                 Manage <span id="hiddenCountBadge" class="hidden-count-badge" style="display:none;">0</span>
+            </button>
+        </div>
+        <div style="width: 10pt;"></div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Marks:</span>
+            <button id="manageMarksBtn" onclick="window.openLineMarksPanel()" style="cursor:pointer;">
+                Line Marks <span id="markCountBadge" class="mark-count-badge" style="display:none;">0</span>
             </button>
         </div>
         <div style="width: 10pt;"></div>
@@ -1532,12 +1627,101 @@ window.decorate(true);
         };
         window.cancelFilters = function() { window.hideInputBox(); };
 
+        // ============= Line Marks 面板 =============
+        window.updateMarkBadge = function() {
+            const badge = document.getElementById('markCountBadge');
+            const cnt = Object.keys(window.markLines).length;
+            badge.style.display = cnt > 0 ? 'inline' : 'none';
+            badge.textContent = cnt;
+        };
+        window.openLineMarksPanel = function() {
+            const panel = document.getElementById('lineMarksPanel');
+            const overlay = document.getElementById('lineMarksPanelOverlay');
+            const list = document.getElementById('lineMarksList');
+            list.innerHTML = '';
+            // 收集所有 line marks，按行号排序，区分是否在隐藏区间内
+            const allMarks = [];
+            for (let lineNumStr in window.markLines) {
+                const lineNum = Number(lineNumStr);
+                allMarks.push({ lineNum: lineNum, text: window.markLines[lineNumStr], hidden: window.isLineHidden(lineNum) });
+            }
+            allMarks.sort((a, b) => a.lineNum - b.lineNum);
+            if (allMarks.length === 0) {
+                list.innerHTML = '<div style="color:#999; padding: 10px;">No line marks.</div>';
+            } else {
+                allMarks.forEach(function(m) {
+                    const div = document.createElement('div');
+                    div.className = 'line-mark-item';
+                    if (m.hidden) {
+                        div.style.cursor = 'default';
+                        div.style.opacity = '0.5';
+                    }
+                    const numSpan = document.createElement('span');
+                    numSpan.className = 'mark-line-num';
+                    numSpan.textContent = 'Line ' + (m.lineNum + 1);
+                    if (m.hidden) {
+                        numSpan.style.color = '#999';
+                    }
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'mark-text';
+                    textSpan.textContent = m.text;
+                    if (m.hidden) {
+                        textSpan.style.color = '#999';
+                    }
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'mark-delete-btn';
+                    delBtn.textContent = 'Delete';
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        delete window.markLines[m.lineNum];
+                        window.updateMarkBadge();
+                        window.scheduleRender();
+                        window.openLineMarksPanel(); // 刷新面板
+                    });
+                    if (!m.hidden) {
+                        div.addEventListener('click', function() {
+                            window.closeLineMarksPanel();
+                            window.scrollToLineNum(m.lineNum);
+                        });
+                    }
+                    div.appendChild(numSpan);
+                    div.appendChild(textSpan);
+                    div.appendChild(delBtn);
+                    list.appendChild(div);
+                });
+            }
+            panel.style.display = 'block';
+            overlay.style.display = 'block';
+        };
+        window.closeLineMarksPanel = function() {
+            document.getElementById('lineMarksPanel').style.display = 'none';
+            document.getElementById('lineMarksPanelOverlay').style.display = 'none';
+        };
+        // 跳转到指定原始行号
+        window.scrollToLineNum = function(lineNum) {
+            // 在 displayLines 中找到对应的 displayIndex
+            let targetDisplayIdx = -1;
+            for (let i = 0; i < window.displayLines.length; i++) {
+                if (window.displayLines[i].type === 'line' && window.displayLines[i].lineNum === lineNum) {
+                    targetDisplayIdx = i;
+                    break;
+                }
+            }
+            if (targetDisplayIdx < 0) return;
+            const container = document.getElementById('virtualContainer');
+            const targetTop = window.getRowTop(targetDisplayIdx);
+            const viewHeight = container.clientHeight;
+            container.scrollTop = Math.max(0, targetTop - viewHeight / 3);
+            window.scheduleRender();
+        };
+
         // ============= 行标记 =============
         window.addMark = function() {
             if (!window.curSelectionLine) return;
             const input = prompt("Enter mark content for this line:");
             if (input === null || input.trim() === "") return;
             window.markLines[window.curSelectionLine] = input.trim();
+            window.updateMarkBadge();
             window.scheduleRender();
         };
         window.editMark = function() {
@@ -1547,12 +1731,14 @@ window.decorate(true);
             const input = prompt("", oldContent);
             if (input === null || input.trim() === "") return;
             window.markLines[window.curSelectionLine] = input.trim();
+            window.updateMarkBadge();
             window.scheduleRender();
         };
         window.removeMark = function() {
             if (!window.curSelectionLine) return;
             if (!window.markLines.hasOwnProperty(window.curSelectionLine)) return;
             delete window.markLines[window.curSelectionLine];
+            window.updateMarkBadge();
             window.scheduleRender();
         };
 
