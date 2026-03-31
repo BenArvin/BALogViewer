@@ -1639,11 +1639,17 @@ window.decorate(true);
             const overlay = document.getElementById('lineMarksPanelOverlay');
             const list = document.getElementById('lineMarksList');
             list.innerHTML = '';
-            // 收集所有 line marks，按行号排序，区分是否在隐藏区间内
+            // 收集所有 line marks，按行号排序，区分是否在隐藏区间内或被 filter 过滤
             const allMarks = [];
             for (let lineNumStr in window.markLines) {
                 const lineNum = Number(lineNumStr);
-                allMarks.push({ lineNum: lineNum, text: window.markLines[lineNumStr], hidden: window.isLineHidden(lineNum) });
+                const isHidden = window.isLineHidden(lineNum);
+                // 检查是否被 filter 过滤掉（不在隐藏区间但被 filter 排除）
+                let isFiltered = false;
+                if (!isHidden && window.filterRules.length > 0 && window.cachedLines && lineNum < window.cachedLines.length) {
+                    isFiltered = !window.filterDecorate(window.cachedLines[lineNum]);
+                }
+                allMarks.push({ lineNum: lineNum, text: window.markLines[lineNumStr], hidden: isHidden || isFiltered });
             }
             allMarks.sort((a, b) => a.lineNum - b.lineNum);
             if (allMarks.length === 0) {
