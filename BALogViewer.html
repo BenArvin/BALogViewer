@@ -277,6 +277,161 @@
             background: rgba(0,0,0,0.3);
             z-index: 2999;
         }
+        /* Highlight List 面板 */
+        .highlight-count-badge {
+            background: #ff7043;
+            color: white;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 12px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .highlight-list-panel {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 3000;
+            width: 550px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .highlight-list-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        .highlight-list-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .highlight-list-item .hl-color-swatch {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            margin-right: 12px;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .highlight-list-item .hl-color-swatch:hover {
+            transform: scale(1.15);
+            box-shadow: 0 0 0 2px rgba(0,0,0,0.15);
+        }
+        /* 颜色选择弹出层 */
+        .color-picker-popover-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: transparent;
+            z-index: 3100;
+        }
+        .color-picker-popover {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            z-index: 3101;
+            padding: 10px;
+            width: 200px;
+        }
+        .color-picker-popover .cp-title {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .color-picker-popover .cp-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .color-picker-popover .cp-cell {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+        .color-picker-popover .cp-cell:hover { transform: scale(1.15); }
+        .color-picker-popover .cp-cell.selected {
+            outline: 2px solid #2196F3;
+            outline-offset: 1px;
+        }
+        .color-picker-popover .cp-custom-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+        .color-picker-popover .cp-custom-row input[type="color"] {
+            width: 32px;
+            height: 26px;
+            padding: 0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            background: transparent;
+        }
+        .color-picker-popover .cp-close-btn {
+            margin-left: auto;
+            background: #eee;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 2px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .color-picker-popover .cp-close-btn:hover { background: #ddd; }
+        .highlight-list-item .hl-keyword {
+            flex: 1;
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .highlight-list-item .hl-delete-btn {
+            flex-shrink: 0;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+        }
+        .highlight-list-item .hl-delete-btn:hover { background: #d32f2f; }
+        .highlight-list-panel-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 2999;
+        }
         .collapsed-row {
             background: #fff3cd;
             color: #856404;
@@ -398,6 +553,31 @@
         </div>
     </div>
 
+    <!-- Highlight List 面板 -->
+    <div id="highlightListPanelOverlay" class="highlight-list-panel-overlay" onclick="window.closeHighlightListPanel()"></div>
+    <div id="highlightListPanel" class="highlight-list-panel">
+        <h3>Highlights</h3>
+        <div id="highlightList"></div>
+        <div style="display: flex; align-items: center; margin-top: 15px;">
+            <button class="btn-clear-all" onclick="window.clearAllHighlightsFromPanel()">Clear All</button>
+            <button class="btn-close-panel" onclick="window.closeHighlightListPanel()">Close</button>
+        </div>
+    </div>
+
+    <!-- 颜色选择弹出层 -->
+    <div id="colorPickerOverlay" class="color-picker-popover-overlay" onclick="window.closeColorPicker()"></div>
+    <div id="colorPickerPopover" class="color-picker-popover">
+        <div style="display:flex; align-items:center;">
+            <span class="cp-title" id="colorPickerTitle">Choose color</span>
+            <button class="cp-close-btn" onclick="window.closeColorPicker()">×</button>
+        </div>
+        <div class="cp-grid" id="colorPickerGrid"></div>
+        <div class="cp-custom-row">
+            <span>Custom:</span>
+            <input type="color" id="colorPickerCustom" />
+        </div>
+    </div>
+
     <!-- 搜索栏 -->
     <div id="searchBar">
         <input type="text" id="searchInput" placeholder="Search... (Enter to next, Shift+Enter to prev)">
@@ -426,6 +606,13 @@
             <span>Marks:</span>
             <button id="manageMarksBtn" onclick="window.openLineMarksPanel()" style="cursor:pointer;">
                 Line Marks <span id="markCountBadge" class="mark-count-badge" style="display:none;">0</span>
+            </button>
+        </div>
+        <div style="width: 10pt;"></div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Highlights:</span>
+            <button id="manageHighlightsBtn" onclick="window.openHighlightListPanel()" style="cursor:pointer;">
+                Highlight List <span id="highlightCountBadge" class="highlight-count-badge" style="display:none;">0</span>
             </button>
         </div>
         <div style="width: 10pt;"></div>
@@ -1397,6 +1584,7 @@ window.decorate(false);
             window.rowTopCache = [];
             window.totalHeight = 0;
             window.updateHiddenBadge();
+            window.updateHighlightBadge();
             window.showLoading();
             window._decorateVersion++;
             window._measureVersion++;
@@ -1560,12 +1748,14 @@ window.decorate(false);
                 if (keyword.includes(item)) {
                     window.highlightKeywords[keyword] = window.highlightKeywords[item];
                     window.retrainHighlightMatcher();
+                    window.updateHighlightBadge();
                     window.decorate();
                     return;
                 } else if (item.includes(keyword)) { return; }
             }
             window.highlightKeywords[keyword] = color;
             window.retrainHighlightMatcher();
+            window.updateHighlightBadge();
             window.decorate();
         };
         window.removeHighlightKeyWord = function () {
@@ -1573,13 +1763,163 @@ window.decorate(false);
             if (keyword.length <= 0 || !window.highlightKeywords.hasOwnProperty(keyword)) return;
             delete window.highlightKeywords[keyword];
             window.retrainHighlightMatcher();
+            window.updateHighlightBadge();
+            window.decorate();
+        };
+        window.removeHighlightKeyWordByName = function (keyword) {
+            if (!keyword || !window.highlightKeywords.hasOwnProperty(keyword)) return;
+            delete window.highlightKeywords[keyword];
+            window.retrainHighlightMatcher();
+            window.updateHighlightBadge();
             window.decorate();
         };
         window.removeAllHighlightKeyWord = function () {
             window.highlightIndex = 0;
             window.highlightKeywords = {};
             window.retrainHighlightMatcher();
+            window.updateHighlightBadge();
             window.decorate();
+        };
+        // ============= Highlight List 面板 =============
+        window.updateHighlightBadge = function() {
+            const badge = document.getElementById('highlightCountBadge');
+            if (!badge) return;
+            const cnt = Object.keys(window.highlightKeywords).length;
+            badge.style.display = cnt > 0 ? 'inline' : 'none';
+            badge.textContent = cnt;
+        };
+        window.openHighlightListPanel = function() {
+            const panel = document.getElementById('highlightListPanel');
+            const overlay = document.getElementById('highlightListPanelOverlay');
+            const list = document.getElementById('highlightList');
+            list.innerHTML = '';
+            const keys = Object.keys(window.highlightKeywords);
+            if (keys.length === 0) {
+                list.innerHTML = '<div style="color:#999; padding: 10px;">No highlights.</div>';
+            } else {
+                keys.forEach(function(kw) {
+                    const color = window.highlightKeywords[kw];
+                    const div = document.createElement('div');
+                    div.className = 'highlight-list-item';
+
+                    const swatch = document.createElement('span');
+                    swatch.className = 'hl-color-swatch';
+                    swatch.style.backgroundColor = color;
+                    swatch.title = 'Click to change color (' + color + ')';
+                    swatch.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.openColorPicker(swatch, kw);
+                    });
+
+                    const kwSpan = document.createElement('span');
+                    kwSpan.className = 'hl-keyword';
+                    kwSpan.textContent = kw;
+                    kwSpan.title = kw;
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'hl-delete-btn';
+                    delBtn.textContent = 'Delete';
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.removeHighlightKeyWordByName(kw);
+                        window.openHighlightListPanel(); // 刷新面板
+                    });
+
+                    div.appendChild(swatch);
+                    div.appendChild(kwSpan);
+                    div.appendChild(delBtn);
+                    list.appendChild(div);
+                });
+            }
+            panel.style.display = 'block';
+            overlay.style.display = 'block';
+        };
+        window.closeHighlightListPanel = function() {
+            document.getElementById('highlightListPanel').style.display = 'none';
+            document.getElementById('highlightListPanelOverlay').style.display = 'none';
+        };
+        window.clearAllHighlightsFromPanel = function() {
+            window.removeAllHighlightKeyWord();
+            window.openHighlightListPanel();
+        };
+        // ============= 颜色选择弹出层 =============
+        window.changeHighlightColor = function(keyword, newColor) {
+            if (!keyword || !newColor) return;
+            if (!window.highlightKeywords.hasOwnProperty(keyword)) return;
+            window.highlightKeywords[keyword] = newColor;
+            window.decorate();
+        };
+        window.openColorPicker = function(anchorEl, keyword) {
+            const popover = document.getElementById('colorPickerPopover');
+            const overlay = document.getElementById('colorPickerOverlay');
+            const grid = document.getElementById('colorPickerGrid');
+            const custom = document.getElementById('colorPickerCustom');
+            const title = document.getElementById('colorPickerTitle');
+            title.textContent = 'Color for: ' + keyword;
+            grid.innerHTML = '';
+            const currentColor = window.highlightKeywords[keyword];
+            // 预设颜色格子
+            window.colorList.forEach(function(c) {
+                const cell = document.createElement('div');
+                cell.className = 'cp-cell';
+                cell.style.backgroundColor = c;
+                cell.title = c;
+                if (c === currentColor) cell.classList.add('selected');
+                cell.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    window.changeHighlightColor(keyword, c);
+                    window.closeColorPicker();
+                    window.openHighlightListPanel(); // 刷新列表
+                });
+                grid.appendChild(cell);
+            });
+            // 自定义颜色输入
+            // 将当前颜色转为 hex 以便 input[type=color] 显示
+            try {
+                const probe = document.createElement('div');
+                probe.style.color = currentColor;
+                document.body.appendChild(probe);
+                const rgb = getComputedStyle(probe).color;
+                document.body.removeChild(probe);
+                const m = rgb.match(/\d+/g);
+                if (m && m.length >= 3) {
+                    const hex = '#' + [m[0], m[1], m[2]].map(function(v){
+                        const h = parseInt(v).toString(16);
+                        return h.length === 1 ? '0' + h : h;
+                    }).join('');
+                    custom.value = hex;
+                }
+            } catch (e) { /* ignore */ }
+            // 仅绑定一次：先移除旧的 handler。用赋值方式避免重复叠加
+            custom.oninput = function(e) {
+                window.changeHighlightColor(keyword, e.target.value);
+                // 同步选中状态（可选：清除预设选中）
+                Array.prototype.forEach.call(grid.querySelectorAll('.cp-cell'), function(el){
+                    el.classList.remove('selected');
+                });
+            };
+            custom.onchange = function() {
+                window.openHighlightListPanel(); // 选色完成后刷新列表
+            };
+            // 计算位置（锁定在 anchor 下方）
+            const rect = anchorEl.getBoundingClientRect();
+            popover.style.display = 'block';
+            overlay.style.display = 'block';
+            // 先显示才能获取 popover 实际尺寸
+            const pw = popover.offsetWidth;
+            const ph = popover.offsetHeight;
+            let left = rect.left;
+            let top = rect.bottom + 6;
+            if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+            if (top + ph > window.innerHeight - 8) top = rect.top - ph - 6;
+            if (left < 8) left = 8;
+            if (top < 8) top = 8;
+            popover.style.left = left + 'px';
+            popover.style.top = top + 'px';
+        };
+        window.closeColorPicker = function() {
+            document.getElementById('colorPickerPopover').style.display = 'none';
+            document.getElementById('colorPickerOverlay').style.display = 'none';
         };
         window.retrainHighlightMatcher = function() {
             let allKeys = Object.keys(window.highlightKeywords);
