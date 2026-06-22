@@ -503,6 +503,14 @@
             margin-left: 10px;
         }
         .filter-item .filter-delete-btn:hover { background: #d32f2f; }
+        .filter-item.select-all {
+            background: #eef5ff;
+            border-color: #cfe0fa;
+            font-weight: 600;
+        }
+        .filter-item.select-all .filter-text {
+            color: #1a4f9e;
+        }
         .filters-panel-overlay {
             display: none;
             position: fixed;
@@ -2128,6 +2136,43 @@ window.decorate(false);
             if (window.filters.length === 0) {
                 list.innerHTML = '<div style="color:#999; padding: 10px;">No filters. Click "+ Add Filter" to add one.</div>';
             } else {
+                // 表头：一键全部勾选（三态）
+                const total = window.filters.length;
+                const enabledCnt = window.filters.filter(function(f) { return f.enabled; }).length;
+                const allChecked = (enabledCnt === total);
+                const noneChecked = (enabledCnt === 0);
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'filter-item select-all';
+
+                const headerCb = document.createElement('input');
+                headerCb.type = 'checkbox';
+                headerCb.className = 'filter-checkbox';
+                headerCb.checked = allChecked;
+                headerCb.indeterminate = (!allChecked && !noneChecked);
+                headerCb.title = 'Toggle all filters';
+                headerCb.addEventListener('change', function() {
+                    // 规则：全选 -> 全不选；其它(未选/部分) -> 全选
+                    const target = !allChecked; // allChecked 取自渲染时的快照
+                    window.filters.forEach(function(f) { f.enabled = target; });
+                    window.rebuildFilterRules();
+                    window.updateFilterBadge();
+                    window.openFiltersPanel();
+                    window.decorate(true);
+                });
+
+                const headerText = document.createElement('span');
+                headerText.className = 'filter-text';
+                headerText.textContent = 'Select All (' + enabledCnt + '/' + total + ')';
+                headerText.style.cursor = 'pointer';
+                headerText.addEventListener('click', function() {
+                    headerCb.click();
+                });
+
+                headerDiv.appendChild(headerCb);
+                headerDiv.appendChild(headerText);
+                list.appendChild(headerDiv);
+
                 window.filters.forEach(function(f, idx) {
                     const div = document.createElement('div');
                     div.className = 'filter-item' + (f.enabled ? '' : ' disabled');
