@@ -432,6 +432,143 @@
             background: rgba(0,0,0,0.3);
             z-index: 2999;
         }
+        /* Filters 面板 */
+        .filter-count-badge {
+            background: #2196F3;
+            color: white;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 12px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .filters-panel {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 3000;
+            width: 600px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .filters-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        .filter-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .filter-item .filter-checkbox {
+            flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            margin-right: 12px;
+            cursor: pointer;
+        }
+        .filter-item .filter-text {
+            flex: 1;
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+        }
+        .filter-item.disabled .filter-text {
+            color: #999;
+            text-decoration: line-through;
+        }
+        .filter-item .filter-delete-btn {
+            flex-shrink: 0;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+        }
+        .filter-item .filter-delete-btn:hover { background: #d32f2f; }
+        .filters-panel-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 2999;
+        }
+        /* Add Filter 弹窗 */
+        .add-filter-dialog-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 3100;
+        }
+        .add-filter-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 3101;
+            width: 520px;
+            padding: 0;
+            overflow: hidden;
+        }
+        .add-filter-dialog h3 {
+            margin: 0;
+            padding: 14px 18px;
+            font-size: 16px;
+            border-bottom: 1px solid #eee;
+        }
+        .add-filter-dialog .body {
+            padding: 16px 18px;
+        }
+        .add-filter-dialog textarea {
+            width: 100%;
+            height: 140px;
+            font-family: monospace;
+            font-size: 13px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            resize: vertical;
+            outline: none;
+        }
+        .add-filter-dialog textarea:focus { border-color: #4a90d9; }
+        .add-filter-dialog .hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 6px;
+        }
+        .add-filter-dialog .footer {
+            padding: 12px 18px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            border-top: 1px solid #eee;
+        }
         .collapsed-row {
             background: #fff3cd;
             color: #856404;
@@ -564,6 +701,33 @@
         </div>
     </div>
 
+    <!-- Filters 面板 -->
+    <div id="filtersPanelOverlay" class="filters-panel-overlay" onclick="window.closeFiltersPanel()"></div>
+    <div id="filtersPanel" class="filters-panel">
+        <h3>Filters</h3>
+        <div id="filtersList"></div>
+        <div style="display: flex; align-items: center; margin-top: 15px;">
+            <button class="btn-add-range" onclick="window.openAddFilterDialog()">+ Add Filter</button>
+            <button class="btn-close-panel" id="copyFiltersBtn" onclick="window.copyFiltersToClipboard()" title="Copy all filter rules to clipboard, one per line">Copy Rules</button>
+            <button class="btn-clear-all" onclick="window.clearAllFilters()">Clear All</button>
+            <button class="btn-close-panel" onclick="window.closeFiltersPanel()">Close</button>
+        </div>
+    </div>
+
+    <!-- Add Filter 弹窗 -->
+    <div id="addFilterDialogOverlay" class="add-filter-dialog-overlay" onclick="window.closeAddFilterDialog()"></div>
+    <div id="addFilterDialog" class="add-filter-dialog">
+        <h3>Add Filters</h3>
+        <div class="body">
+            <textarea id="addFilterInput" placeholder="Enter one filter per line, regex supported. Multiple lines = multiple filters (OR logic)."></textarea>
+            <div class="hint">Tip: One filter per line. Each line is a regex (case-insensitive). All enabled filters are combined with OR.</div>
+        </div>
+        <div class="footer">
+            <button class="btn-close-panel" onclick="window.closeAddFilterDialog()">Cancel</button>
+            <button class="btn-add-range" onclick="window.confirmAddFilter()">OK</button>
+        </div>
+    </div>
+
     <!-- 颜色选择弹出层 -->
     <div id="colorPickerOverlay" class="color-picker-popover-overlay" onclick="window.closeColorPicker()"></div>
     <div id="colorPickerPopover" class="color-picker-popover">
@@ -616,18 +780,11 @@
             </button>
         </div>
         <div style="width: 10pt;"></div>
-        <div id="filters" style="display: flex; align-items: center;">
-            Filters:
-            <div id="filterDropdown" style="position: relative; display: inline-block; margin-left: 10px;">
-                <div id="filterText" style="cursor: pointer; width: 400px; border: 1pt solid black; height: 24px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;" onclick="window.showInputBox()"></div>
-                <div id="inputBox" style="display: none; position: absolute; top: 35px; left: 0; width: 500px; background-color: white; border: 1px solid black; box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); z-index: 1000;">
-                    <textarea id="filterInput" placeholder="Enter keywords, one per line, OR logic between lines, regex supported" style="width: 100%; height: 100px;"></textarea>
-                    <div style="display: flex; justify-content: flex-end; padding: 5px; gap: 10px;">
-                        <button onclick="window.cancelFilters()" style="font-size: 14px; padding: 8px 16px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
-                        <button onclick="window.applyFilters()" style="font-size: 14px; padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
-                    </div>
-                </div>
-            </div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Filters:</span>
+            <button id="manageFiltersBtn" onclick="window.openFiltersPanel()" style="cursor:pointer;">
+                Manage <span id="filterCountBadge" class="filter-count-badge" style="display:none;">0</span>
+            </button>
         </div>
         <div style="margin-left: auto; display: flex; gap: 10px;">
             <button id="copyButton" onclick="window.copyContent()">Copy Content</button>
@@ -713,6 +870,7 @@
         window.curSelectionLine = null;
         window.filterRules = [];
         window.filterRuleTexts = [];
+        window.filters = []; // [{text: string, enabled: boolean}]
         window.markLines = {};
         window.curFilePath = null;
         window.highlightMatcher = null;
@@ -1564,13 +1722,13 @@ window.decorate(false);
         const ASYNC_THRESHOLD = 10000;
 
         window.onFileChanged = function(content) {
-            document.getElementById('filterText').innerText = '';
             window.originContent = content;
             window.cachedLines = null;
             window.highlightKeywords = {};
             window.highlightIndex = 0;
             window.filterRules = [];
             window.filterRuleTexts = [];
+            window.filters = [];
             window.markLines = {};
             window.hiddenRanges = [];
             window.highlightMatcher = null;
@@ -1585,6 +1743,7 @@ window.decorate(false);
             window.totalHeight = 0;
             window.updateHiddenBadge();
             window.updateHighlightBadge();
+            window.updateFilterBadge();
             window.showLoading();
             window._decorateVersion++;
             window._measureVersion++;
@@ -1930,42 +2089,199 @@ window.decorate(false);
         };
 
         // ============= 过滤器 =============
-        window.showInputBox = function() {
-            const inputBox = document.getElementById('inputBox');
-            if (inputBox.style.display === 'none') {
-                document.getElementById('filterInput').value = window.filterRuleTexts.join('\n');
-                inputBox.style.display = 'block';
-                document.addEventListener('click', window.hideInputBoxOnClickOutside);
+        // 根据 window.filters 重建生效的 filterRules / filterRuleTexts
+        window.rebuildFilterRules = function() {
+            const enabled = window.filters.filter(f => f.enabled && f.text && f.text.length > 0);
+            window.filterRuleTexts = enabled.map(f => f.text);
+            const rules = [];
+            for (const f of enabled) {
+                try {
+                    rules.push(new RegExp(f.text, 'i'));
+                } catch (e) {
+                    // 非法正则：降级为字面量匹配
+                    const escaped = f.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    rules.push(new RegExp(escaped, 'i'));
+                }
+            }
+            window.filterRules = rules;
+        };
+
+        window.updateFilterBadge = function() {
+            const badge = document.getElementById('filterCountBadge');
+            if (!badge) return;
+            const enabledCnt = window.filters.filter(f => f.enabled).length;
+            const totalCnt = window.filters.length;
+            if (totalCnt === 0) {
+                badge.style.display = 'none';
             } else {
-                inputBox.style.display = 'none';
-                document.removeEventListener('click', window.hideInputBoxOnClickOutside);
+                badge.style.display = 'inline';
+                badge.textContent = enabledCnt + '/' + totalCnt;
             }
         };
-        window.hideInputBox = function() {
-            document.getElementById('inputBox').style.display = 'none';
-            document.removeEventListener('click', window.hideInputBoxOnClickOutside);
-        };
-        window.hideInputBoxOnClickOutside = function(event) {
-            const inputBox = document.getElementById('inputBox');
-            const filterText = document.getElementById('filterText');
-            if (!inputBox.contains(event.target) && event.target !== filterText) window.hideInputBox();
-        };
-        window.applyFilters = function() {
-            window.hideInputBox();
-            const filterInput = document.getElementById('filterInput').value.trim();
-            if (filterInput.length > 0) {
-                const keywords = filterInput.split('\n').map(k => k.trim()).filter(k => k.length > 0);
-                document.getElementById('filterText').innerText = keywords.join(' ');
-                window.filterRuleTexts = keywords;
-                window.filterRules = keywords.map(k => new RegExp(k, 'i'));
+
+        // 打开 / 关闭 Filters 列表面板
+        window.openFiltersPanel = function() {
+            const panel = document.getElementById('filtersPanel');
+            const overlay = document.getElementById('filtersPanelOverlay');
+            const list = document.getElementById('filtersList');
+            list.innerHTML = '';
+            if (window.filters.length === 0) {
+                list.innerHTML = '<div style="color:#999; padding: 10px;">No filters. Click "+ Add Filter" to add one.</div>';
             } else {
-                document.getElementById('filterText').innerText = "";
-                window.filterRuleTexts = [];
-                window.filterRules = [];
+                window.filters.forEach(function(f, idx) {
+                    const div = document.createElement('div');
+                    div.className = 'filter-item' + (f.enabled ? '' : ' disabled');
+
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'filter-checkbox';
+                    cb.checked = !!f.enabled;
+                    cb.title = 'Enable / disable this filter';
+                    cb.addEventListener('change', function() {
+                        window.filters[idx].enabled = cb.checked;
+                        window.rebuildFilterRules();
+                        window.updateFilterBadge();
+                        window.openFiltersPanel();
+                        window.decorate(true);
+                    });
+
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'filter-text';
+                    textSpan.textContent = f.text;
+                    textSpan.title = f.text;
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'filter-delete-btn';
+                    delBtn.textContent = 'Delete';
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.filters.splice(idx, 1);
+                        window.rebuildFilterRules();
+                        window.updateFilterBadge();
+                        window.openFiltersPanel();
+                        window.decorate(true);
+                    });
+
+                    div.appendChild(cb);
+                    div.appendChild(textSpan);
+                    div.appendChild(delBtn);
+                    list.appendChild(div);
+                });
             }
-window.decorate(true);
+            panel.style.display = 'block';
+            overlay.style.display = 'block';
         };
-        window.cancelFilters = function() { window.hideInputBox(); };
+        window.closeFiltersPanel = function() {
+            document.getElementById('filtersPanel').style.display = 'none';
+            document.getElementById('filtersPanelOverlay').style.display = 'none';
+        };
+        window.clearAllFilters = function() {
+            if (window.filters.length === 0) return;
+            window.filters = [];
+            window.rebuildFilterRules();
+            window.updateFilterBadge();
+            window.openFiltersPanel();
+            window.decorate(true);
+        };
+
+        // 复制所有 filter 规则到剪贴板（每行一个）
+        window.copyFiltersToClipboard = function() {
+            const btn = document.getElementById('copyFiltersBtn');
+            const originalText = btn ? btn.textContent : 'Copy Rules';
+            const flashBtn = function(msg) {
+                if (!btn) return;
+                btn.textContent = msg;
+                setTimeout(function() { btn.textContent = originalText; }, 1200);
+            };
+            if (!window.filters || window.filters.length === 0) {
+                flashBtn('Nothing to copy');
+                return;
+            }
+            const text = window.filters.map(function(f) { return f.text; }).join('\n');
+            const fallbackCopy = function() {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.top = '-1000px';
+                    ta.style.left = '-1000px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    flashBtn(ok ? ('Copied ' + window.filters.length) : 'Copy failed');
+                } catch (e) {
+                    flashBtn('Copy failed');
+                }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    flashBtn('Copied ' + window.filters.length);
+                }).catch(function() {
+                    fallbackCopy();
+                });
+            } else {
+                fallbackCopy();
+            }
+        };
+
+        // Add Filter 弹窗
+        window.openAddFilterDialog = function() {
+            const dialog = document.getElementById('addFilterDialog');
+            const overlay = document.getElementById('addFilterDialogOverlay');
+            const input = document.getElementById('addFilterInput');
+            input.value = '';
+            dialog.style.display = 'block';
+            overlay.style.display = 'block';
+            setTimeout(function() { input.focus(); }, 0);
+        };
+        window.closeAddFilterDialog = function() {
+            document.getElementById('addFilterDialog').style.display = 'none';
+            document.getElementById('addFilterDialogOverlay').style.display = 'none';
+        };
+        window.confirmAddFilter = function() {
+            const text = document.getElementById('addFilterInput').value;
+            const lines = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            if (lines.length === 0) {
+                window.closeAddFilterDialog();
+                return;
+            }
+            // 去重（基于已存在的 text）
+            const existing = new Set(window.filters.map(f => f.text));
+            let addedCount = 0;
+            for (const ln of lines) {
+                if (existing.has(ln)) continue;
+                window.filters.push({ text: ln, enabled: true });
+                existing.add(ln);
+                addedCount++;
+            }
+            window.closeAddFilterDialog();
+            if (addedCount > 0) {
+                window.rebuildFilterRules();
+                window.updateFilterBadge();
+                window.openFiltersPanel();
+                window.decorate(true);
+            } else {
+                window.openFiltersPanel();
+            }
+        };
+
+        // Add Filter textarea 快捷键（Ctrl/Cmd+Enter 提交，Esc 取消）
+        document.addEventListener('DOMContentLoaded', function() {
+            const afi = document.getElementById('addFilterInput');
+            if (afi) {
+                afi.addEventListener('keydown', function(e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        window.confirmAddFilter();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        window.closeAddFilterDialog();
+                    }
+                });
+            }
+        });
 
         // ============= Line Marks 面板 =============
         window.updateMarkBadge = function() {
