@@ -424,6 +424,42 @@
             margin-left: 10px;
         }
         .highlight-list-item .hl-delete-btn:hover { background: #d32f2f; }
+        /* 通用 Edit / Copy 按钮（用于 highlights / line marks / filters 列表项） */
+        .row-edit-btn {
+            flex-shrink: 0;
+            background: #4a90d9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 6px;
+        }
+        .row-edit-btn:hover { background: #3a7bc8; }
+        .row-copy-btn {
+            flex-shrink: 0;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 6px;
+            min-width: 60px;
+        }
+        .row-copy-btn:hover { background: #5a6268; }
+        .row-copy-btn.copied { background: #28a745; }
+        .row-edit-input {
+            flex: 1;
+            font-size: 14px;
+            padding: 4px 6px;
+            border: 1px solid #4a90d9;
+            border-radius: 3px;
+            outline: none;
+            font-family: inherit;
+        }
         .highlight-list-panel-overlay {
             display: none;
             position: fixed;
@@ -908,6 +944,45 @@
                        .replace(/>/g, '&gt;')
                        .replace(/"/g, '&quot;')
                        .replace(/'/g, '&#39;');
+        };
+        // 通用：复制文本到剪贴板，并在按钮上显示短暂反馈
+        window.copyTextToClipboard = function(text, btn) {
+            const originalText = btn ? btn.textContent : 'Copy';
+            const flash = function(msg, ok) {
+                if (!btn) return;
+                btn.textContent = msg;
+                if (ok) btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 1000);
+            };
+            const fallbackCopy = function() {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.top = '-1000px';
+                    ta.style.left = '-1000px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    flash(ok ? 'Copied!' : 'Failed', ok);
+                } catch (e) {
+                    flash('Failed', false);
+                }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    flash('Copied!', true);
+                }).catch(function() {
+                    fallbackCopy();
+                });
+            } else {
+                fallbackCopy();
+            }
         };
         window.showLoading = function () {
             document.getElementById('fullscreenOverlay').style.display = 'block';
@@ -1940,6 +2015,47 @@ window.decorate(false);
             window.updateHighlightBadge();
             window.decorate();
         };
+        // 重命名一个 highlight 关键词，保留原颜色，并处理与已有关键词的“包含/被包含”关系
+        window.renameHighlightKeyword = function(oldKw, newKw) {
+            if (!oldKw || !newKw) return;
+            if (!window.highlightKeywords.hasOwnProperty(oldKw)) return;
+            // 编码新关键词，与 addHighlightKeyWord 的处理保持一致
+            newKw = window.htmlEncode(newKw);
+            if (newKw.length <= 0 || newKw === oldKw) return;
+            const oldColor = window.highlightKeywords[oldKw];
+            // 如果新关键词已经存在（且不是自己），直接删除旧的，不覆盖现有颜色
+            if (window.highlightKeywords.hasOwnProperty(newKw)) {
+                delete window.highlightKeywords[oldKw];
+                window.retrainHighlightMatcher();
+                window.updateHighlightBadge();
+                window.decorate();
+                return;
+            }
+            // 先移除旧关键词
+            delete window.highlightKeywords[oldKw];
+            // 重新走一遍“包含/被包含”合并逻辑（参考 addHighlightKeyWord）
+            const allKeys = Object.keys(window.highlightKeywords);
+            let assignedColor = oldColor; // 默认沿用旧颜色
+            let skipInsert = false;
+            for (let i = 0; i < allKeys.length; i++) {
+                const item = allKeys[i];
+                if (newKw.includes(item)) {
+                    // 新词包含已有词：沿用已有词的颜色
+                    assignedColor = window.highlightKeywords[item];
+                    break;
+                } else if (item.includes(newKw)) {
+                    // 已有词包含新词：跳过新插入（避免冲突）
+                    skipInsert = true;
+                    break;
+                }
+            }
+            if (!skipInsert) {
+                window.highlightKeywords[newKw] = assignedColor;
+            }
+            window.retrainHighlightMatcher();
+            window.updateHighlightBadge();
+            window.decorate();
+        };
         window.removeAllHighlightKeyWord = function () {
             window.highlightIndex = 0;
             window.highlightKeywords = {};
@@ -1983,6 +2099,56 @@ window.decorate(false);
                     kwSpan.textContent = kw;
                     kwSpan.title = kw;
 
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'row-edit-btn';
+                    editBtn.textContent = 'Edit';
+                    editBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        // 行内编辑：将 kwSpan 替换为 input
+                        if (div.querySelector('.row-edit-input')) return;
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'row-edit-input';
+                        input.value = kw;
+                        kwSpan.style.display = 'none';
+                        div.insertBefore(input, kwSpan);
+                        input.focus();
+                        input.select();
+                        let committed = false;
+                        const commit = function() {
+                            if (committed) return;
+                            committed = true;
+                            const newKw = input.value.trim().toLowerCase();
+                            if (newKw.length === 0 || newKw === kw) {
+                                // 取消或无变化，恢复显示
+                                input.remove();
+                                kwSpan.style.display = '';
+                                return;
+                            }
+                            window.renameHighlightKeyword(kw, newKw);
+                            window.openHighlightListPanel(); // 刷新整个列表，避免融合显示问题
+                        };
+                        const cancel = function() {
+                            if (committed) return;
+                            committed = true;
+                            input.remove();
+                            kwSpan.style.display = '';
+                        };
+                        input.addEventListener('keydown', function(ev) {
+                            if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                            else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+                        });
+                        input.addEventListener('blur', commit);
+                    });
+
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'row-copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.copyTextToClipboard(kw, copyBtn);
+                    });
+
                     const delBtn = document.createElement('button');
                     delBtn.className = 'hl-delete-btn';
                     delBtn.textContent = 'Delete';
@@ -1994,6 +2160,8 @@ window.decorate(false);
 
                     div.appendChild(swatch);
                     div.appendChild(kwSpan);
+                    div.appendChild(editBtn);
+                    div.appendChild(copyBtn);
                     div.appendChild(delBtn);
                     list.appendChild(div);
                 });
@@ -2195,6 +2363,65 @@ window.decorate(false);
                     textSpan.textContent = f.text;
                     textSpan.title = f.text;
 
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'row-edit-btn';
+                    editBtn.textContent = 'Edit';
+                    editBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (div.querySelector('.row-edit-input')) return;
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'row-edit-input';
+                        input.style.fontFamily = 'monospace';
+                        input.value = f.text;
+                        textSpan.style.display = 'none';
+                        div.insertBefore(input, textSpan);
+                        input.focus();
+                        input.select();
+                        let committed = false;
+                        const commit = function() {
+                            if (committed) return;
+                            committed = true;
+                            const newText = input.value.trim();
+                            if (newText.length === 0 || newText === f.text) {
+                                input.remove();
+                                textSpan.style.display = '';
+                                return;
+                            }
+                            // 防重复：若已存在相同 text 的其他 filter，则放弃修改
+                            const dup = window.filters.some(function(ff, i) { return i !== idx && ff.text === newText; });
+                            if (dup) {
+                                input.remove();
+                                textSpan.style.display = '';
+                                return;
+                            }
+                            window.filters[idx].text = newText;
+                            window.rebuildFilterRules();
+                            window.updateFilterBadge();
+                            window.openFiltersPanel();
+                            window.decorate(true);
+                        };
+                        const cancel = function() {
+                            if (committed) return;
+                            committed = true;
+                            input.remove();
+                            textSpan.style.display = '';
+                        };
+                        input.addEventListener('keydown', function(ev) {
+                            if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                            else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+                        });
+                        input.addEventListener('blur', commit);
+                    });
+
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'row-copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.copyTextToClipboard(f.text, copyBtn);
+                    });
+
                     const delBtn = document.createElement('button');
                     delBtn.className = 'filter-delete-btn';
                     delBtn.textContent = 'Delete';
@@ -2209,6 +2436,8 @@ window.decorate(false);
 
                     div.appendChild(cb);
                     div.appendChild(textSpan);
+                    div.appendChild(editBtn);
+                    div.appendChild(copyBtn);
                     div.appendChild(delBtn);
                     list.appendChild(div);
                 });
@@ -2375,6 +2604,56 @@ window.decorate(false);
                     if (m.hidden) {
                         textSpan.style.color = '#999';
                     }
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'row-edit-btn';
+                    editBtn.textContent = 'Edit';
+                    editBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (div.querySelector('.row-edit-input')) return;
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'row-edit-input';
+                        input.value = m.text;
+                        textSpan.style.display = 'none';
+                        div.insertBefore(input, textSpan);
+                        input.focus();
+                        input.select();
+                        let committed = false;
+                        const commit = function() {
+                            if (committed) return;
+                            committed = true;
+                            const newText = input.value.trim();
+                            if (newText.length === 0 || newText === m.text) {
+                                input.remove();
+                                textSpan.style.display = '';
+                                return;
+                            }
+                            window.markLines[m.lineNum] = newText;
+                            window.updateMarkBadge();
+                            window.scheduleRender();
+                            window.openLineMarksPanel(); // 刷新面板
+                        };
+                        const cancel = function() {
+                            if (committed) return;
+                            committed = true;
+                            input.remove();
+                            textSpan.style.display = '';
+                        };
+                        input.addEventListener('keydown', function(ev) {
+                            if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                            else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+                        });
+                        input.addEventListener('blur', commit);
+                    });
+
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'row-copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.copyTextToClipboard(m.text, copyBtn);
+                    });
+
                     const delBtn = document.createElement('button');
                     delBtn.className = 'mark-delete-btn';
                     delBtn.textContent = 'Delete';
@@ -2386,13 +2665,19 @@ window.decorate(false);
                         window.openLineMarksPanel(); // 刷新面板
                     });
                     if (!m.hidden) {
-                        div.addEventListener('click', function() {
+                        div.addEventListener('click', function(ev) {
+                            // 点击编辑相关元素时，不触发跳转
+                            if (ev.target === editBtn || ev.target === copyBtn || ev.target === delBtn) return;
+                            if (ev.target.classList && ev.target.classList.contains('row-edit-input')) return;
+                            if (div.querySelector('.row-edit-input')) return; // 编辑中不跳转
                             window.closeLineMarksPanel();
                             window.scrollToLineNum(m.lineNum);
                         });
                     }
                     div.appendChild(numSpan);
                     div.appendChild(textSpan);
+                    div.appendChild(editBtn);
+                    div.appendChild(copyBtn);
                     div.appendChild(delBtn);
                     list.appendChild(div);
                 });
